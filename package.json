@@ -1,0 +1,16 @@
+{
+  "name": "stock-inventory-system",
+  "version": "1.0.0",
+  "private": true,
+  "license": "ISC",
+  "description": "Inventory Management System with Node.js and SQLite",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7"
+  }
+}
