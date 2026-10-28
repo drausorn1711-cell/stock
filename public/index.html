@@ -102,7 +102,7 @@
         </div>
     </div>
 
-    <!-- Modal เพิ่ม/แก้ไขสินค้า (ดีไซน์เหมือนภาพที่ 2 เป๊ะๆ) -->
+    <!-- Modal เพิ่ม/แก้ไขสินค้า -->
     <div id="productModal" class="fixed inset-0 bg-black/40 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative">
             <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-lg">✕</button>
@@ -110,7 +110,7 @@
             <form id="productForm" onsubmit="saveProduct(event)">
                 <input type="hidden" id="productId">
                 <div class="space-y-4">
-                    <!-- รูปภาพสินค้าแบบมีกรอบประปะ -->
+                    <!-- รูปภาพสินค้า -->
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">รูปภาพสินค้า <span class="text-red-500">(จำเป็นต้องใส่)</span></label>
                         <div class="border-2 border-dashed border-gray-200 rounded-2xl p-4 text-center bg-gray-50/50 relative hover:border-blue-400 transition">
@@ -142,15 +142,16 @@
                         <input type="text" id="name" placeholder="เช่น น้ำพริกอ่อง" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 placeholder-gray-300">
                     </div>
 
-                    <!-- หมวดหมู่ -->
+                    <!-- หมวดหมู่ (อัปเดตตามภาพที่ต้องการ) -->
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">หมวดหมู่ <span class="text-red-500">*</span></label>
                         <select id="category" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none bg-white text-gray-700 focus:border-blue-500">
                             <option value="">-- เลือกหมวดหมู่ --</option>
+                            <option value="ของสด">ของสด</option>
+                            <option value="ของแห้ง">ของแห้ง</option>
                             <option value="น้ำพริก">น้ำพริก</option>
-                            <option value="อาหารแห้ง">อาหารแห้ง</option>
-                            <option value="เครื่องดื่ม">เครื่องดื่ม</option>
-                            <option value="อื่นๆ">อื่นๆ</option>
+                            <option value="สมุนไพร">สมุนไพร</option>
+                            <option value="ของนำเข้า">ของนำเข้า</option>
                         </select>
                     </div>
 
@@ -185,7 +186,7 @@
         async function fetchProducts() {
             const { data, error } = await supabaseClient.from('products').select('*').order('id', { ascending: false });
             if (error) {
-                console.error('Error:', error);
+                console.error('Error fetching:', error);
                 return;
             }
             products = data || [];
@@ -269,7 +270,6 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // รองรับการกด Ctrl + V วางรูปภาพ และเลือกไฟล์ พร้อมบีบอัดอัตโนมัติ
         function processImageFile(file) {
             if (file) {
                 document.getElementById('fileName').innerText = file.name;
@@ -337,14 +337,24 @@
 
             const productData = { name, size, category, quantity, minStock, image };
 
+            let error = null;
             if (id) {
-                await supabaseClient.from('products').update(productData).eq('id', id);
+                const res = await supabaseClient.from('products').update(productData).eq('id', id);
+                error = res.error;
             } else {
-                await supabaseClient.from('products').insert([productData]);
+                const res = await supabaseClient.from('products').insert([productData]);
+                error = res.error;
             }
 
             btn.innerText = 'บันทึกข้อมูล';
             btn.disabled = false;
+
+            if (error) {
+                alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
+                console.error(error);
+                return;
+            }
+
             closeModal();
             fetchProducts();
         }
@@ -353,7 +363,11 @@
             const p = products.find(item => item.id == id);
             if (!p) return;
             const newQty = Math.max(0, p.quantity + amount);
-            await supabaseClient.from('products').update({ quantity: newQty }).eq('id', id);
+            const { error } = await supabaseClient.from('products').update({ quantity: newQty }).eq('id', id);
+            if (error) {
+                alert('เกิดข้อผิดพลาดในการอัปเดตสต็อก');
+                return;
+            }
             fetchProducts();
         }
 
@@ -379,7 +393,11 @@
 
         async function deleteProduct(id) {
             if (confirm('คุณต้องการลบสินค้านี้ใช่หรือไม่?')) {
-                await supabaseClient.from('products').delete().eq('id', id);
+                const { error } = await supabaseClient.from('products').delete().eq('id', id);
+                if (error) {
+                    alert('เกิดข้อผิดพลาดในการลบข้อมูล');
+                    return;
+                }
                 fetchProducts();
             }
         }
