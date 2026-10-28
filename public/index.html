@@ -176,7 +176,7 @@
                 <!-- ส่วนรูปภาพ -->
                 <div>
                     <label class="block text-xs font-medium text-slate-700 mb-1">
-                        รูปภาพสินค้า <span class="text-rose-500 font-bold">* (จำเป็นต้องใส่)</span>
+                        รูปภาพสินค้า <span class="text-rose-500 font-bold">(จำเป็นต้องใส่)</span>
                     </label>
                     <div id="imageDropZone" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-3 bg-slate-50 flex items-center gap-3 transition">
                         <div id="imagePreviewBox" class="w-16 h-16 border border-slate-200 rounded-lg bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
@@ -195,7 +195,7 @@
                 <!-- ขนาดสินค้า / SKU -->
                 <div>
                     <label class="block text-xs font-medium text-slate-700 mb-1">ขนาดสินค้า / SKU</label>
-                    <input type="text" id="formSize" placeholder="เช่น 100 กรัม, 200 กรัม" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="formSize" placeholder="เช่น เล็ก, กลาง, จัมโบ้ หรือ 01" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <!-- ชื่อสินค้า -->
@@ -243,6 +243,47 @@
         let logs = [];
         let currentBase64Image = '';
         let editingProductId = null; // เก็บ ID เมื่ออยู่ในโหมดแก้ไข
+
+        window.onload = function() {
+            fetchProducts();
+            fetchLogs();
+        };
+
+        // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression)
+        function compressImage(src, maxWidth, maxHeight, quality) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'Anonymous';
+                img.onload = function() {
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width = Math.round((width * maxHeight) / height);
+                            height = maxHeight;
+                        }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                    resolve(compressedBase64);
+                };
+                img.onerror = (err) => reject(err);
+                img.src = src;
+            });
+        }
 
         // 1. ดึงข้อมูลสินค้า
         async function fetchProducts() {
@@ -365,14 +406,19 @@
             }
         }
 
-        // 6. จัดการรูปภาพ
+        // 6. จัดการอัปโหลดรูปภาพผ่านปุ่ม พร้อมบีบอัดภาพอัตโนมัติ
         function handleImageUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = function(evt) {
-                setImagePreview(evt.target.result);
+            reader.onload = async function(evt) {
+                try {
+                    const compressed = await compressImage(evt.target.result, 800, 800, 0.7);
+                    setImagePreview(compressed);
+                } catch (err) {
+                    setImagePreview(evt.target.result);
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -382,7 +428,7 @@
             document.getElementById('imagePreviewBox').innerHTML = `<img src="${base64Url}" class="w-full h-full object-cover">`;
         }
 
-        // วางรูปด้วย Ctrl + V
+        // วางรูปด้วย Ctrl + V พร้อมบีบอัดภาพอัตโนมัติ
         window.addEventListener('paste', (e) => {
             const modal = document.getElementById('productModal');
             if (modal && !modal.classList.contains('hidden')) {
@@ -394,8 +440,13 @@
                         const blob = items[i].getAsFile();
                         if (blob) {
                             const reader = new FileReader();
-                            reader.onload = function(evt) {
-                                setImagePreview(evt.target.result);
+                            reader.onload = async function(evt) {
+                                try {
+                                    const compressed = await compressImage(evt.target.result, 800, 800, 0.7);
+                                    setImagePreview(compressed);
+                                } catch (err) {
+                                    setImagePreview(evt.target.result);
+                                }
                             };
                             reader.readAsDataURL(blob);
                             e.preventDefault();
@@ -417,7 +468,7 @@
             document.getElementById('statLowStock').innerText = lowStock.toLocaleString('th-TH');
         }
 
-        // 8. แสดงผลตารางสินค้า (มีปุ่มแก้ไขเพิ่มเข้ามา)
+        // 8. แสดงผลตารางสินค้า
         function renderTable() {
             const tbody = document.getElementById('productTableBody');
             const search = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -474,11 +525,9 @@
                     </td>
                     <td class="px-4 py-3 text-center">
                         <div class="flex items-center justify-center gap-1.5">
-                            <!-- ปุ่มแก้ไขสินค้า -->
                             <button type="button" onclick="editProduct(${p.id})" title="แก้ไขสินค้า" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition">
                                 <i data-lucide="edit-3" class="w-4 h-4"></i>
                             </button>
-                            <!-- ปุ่มลบสินค้า -->
                             <button type="button" onclick="deleteProduct(${p.id})" title="ลบสินค้า" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
@@ -548,7 +597,7 @@
             if (window.lucide) lucide.createIcons();
         }
 
-        // เปิด Modal แก้ไขสินค้าพร้อมดึงค่าเดิมมาใส่
+        // เปิด Modal แก้ไขสินค้า
         function editProduct(id) {
             const p = products.find(item => item.id === Number(id));
             if (!p) return;
@@ -576,102 +625,47 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // ส่งออกรายงานสินค้า / สต็อกนำเข้า เป็น PDF
-        function exportProductsPDF() {
-            if (products.length === 0) {
-                alert('ยังไม่มีข้อมูลสินค้าสำหรับส่งออก PDF');
-                return;
-            }
-
-            const rowsHtml = products.map((p, index) => `
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 8px; text-align: center;">${index + 1}</td>
-                    <td style="padding: 8px; text-align: center;">
-                        ${p.image ? `<img src="${p.image}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 4px; display: inline-block;">` : '-'}
-                    </td>
-                    <td style="padding: 8px; font-weight: bold;">${p.name || '-'}</td>
-                    <td style="padding: 8px;">${p.size || p.sku || '-'}</td>
-                    <td style="padding: 8px;">${p.category || '-'}</td>
-                    <td style="padding: 8px; text-align: center; font-weight: bold; color: ${Number(p.quantity) <= Number(p.minStock) ? '#d97706' : '#16a34a'};">${p.quantity || 0}</td>
-                </tr>
-            `).join('');
-
-            const element = document.createElement('div');
-            element.innerHTML = `
-                <div style="font-family: sans-serif; padding: 24px; color: #1e293b;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px;">
-                        <div>
-                            <h2 style="font-size: 20px; font-weight: bold; margin: 0; color: #1e293b;">รายงานรายการสินค้าคงคลังและนำเข้า</h2>
-                            <p style="font-size: 11px; color: #64748b; margin: 4px 0 0 0;">StockMaster - ระบบจัดการคลังสินค้า</p>
-                        </div>
-                        <div style="text-align: right;">
-                            <p style="font-size: 11px; color: #64748b; margin: 0;">วันที่ออกเอกสาร: ${new Date().toLocaleString('th-TH')}</p>
-                            <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">รายการทั้งหมด: ${products.length} รายการ</p>
-                        </div>
-                    </div>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
-                        <thead>
-                            <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; font-weight: bold; color: #475569;">
-                                <th style="padding: 8px; text-align: center; width: 40px;">ลำดับ</th>
-                                <th style="padding: 8px; text-align: center; width: 50px;">รูปภาพ</th>
-                                <th style="padding: 8px;">ชื่อสินค้า</th>
-                                <th style="padding: 8px;">ขนาด/SKU</th>
-                                <th style="padding: 8px;">หมวดหมู่</th>
-                                <th style="padding: 8px; text-align: center;">คงเหลือ</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rowsHtml}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-
-            html2pdf().from(element).set({
-                margin: [10, 10, 10, 10],
-                filename: `Stock_Products_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            }).save();
-        }
-
-        // ส่งออก PDF ประวัติ Logs
-        function exportLogsPDF() {
-            const elem = document.getElementById('logsTable');
-            html2pdf().from(elem).save(`Stock_Logs_${new Date().toISOString().slice(0,10)}.pdf`);
-        }
-
         // ส่งออก Excel
         function exportToExcel() {
-            const rows = products.map(p => ({
-                'ขนาด/SKU': p.size || p.sku || '',
-                'ชื่อสินค้า': p.name,
-                'หมวดหมู่': p.category,
-                'จำนวนคงเหลือ': p.quantity,
-                'จุดเตือนสต็อก': p.minStock
+            if (products.length === 0) return alert('ไม่มีข้อมูลสำหรับส่งออก');
+            const excelData = products.map(p => ({
+                'SKU / ขนาด': p.size || p.sku || '-',
+                'ชื่อสินค้า': p.name || '-',
+                'หมวดหมู่': p.category || '-',
+                'จำนวนคงเหลือ': p.quantity || 0,
+                'จุดเตือนสต็อกต่ำ': p.minStock || 0
             }));
-            const ws = XLSX.utils.json_to_sheet(rows);
+            const ws = XLSX.utils.json_to_sheet(excelData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "คลังสินค้า");
-            XLSX.writeFile(wb, `Stock_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "StockData");
+            XLSX.writeFile(wb, "รายงานสต็อกสินค้า.xlsx");
         }
 
-        // เริ่มต้นโหลดข้อมูล
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchProducts();
-            fetchLogs();
-            if (window.lucide) lucide.createIcons();
-        });
+        // ส่งออก PDF รายการสินค้า
+        function exportProductsPDF() {
+            const element = document.getElementById('tabProducts');
+            const opt = {
+                margin: 0.5,
+                filename: 'รายงานสินค้า.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
+            };
+            html2pdf().set(opt).from(element).save();
+        }
 
-        // ดึงข้อมูลอัตโนมัติทุก 3 วินาที
-        setInterval(() => {
-            const modal = document.getElementById('productModal');
-            const isModalOpen = modal ? !modal.classList.contains('hidden') : false;
-            if (!isModalOpen) {
-                fetchProducts();
-                fetchLogs();
-            }
-        }, 3000);
+        // ส่งออก PDF ประวัติการเคลื่อนไหว
+        function exportLogsPDF() {
+            const element = document.getElementById('tabLogs');
+            const opt = {
+                margin: 0.5,
+                filename: 'รายงานประวัติสต็อก.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
+            };
+            html2pdf().set(opt).from(element).save();
+        }
     </script>
 </body>
 </html>
