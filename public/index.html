@@ -6,9 +6,6 @@
     <title>StockMaster - ระบบจัดการสินค้าและสต็อกสินค้าแบบเรียลไทม์</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- ไลบรารีสำหรับส่งออกเอกสาร Excel & PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Prompt', sans-serif; }
@@ -28,8 +25,9 @@
                 </div>
             </div>
             <div class="flex items-center space-x-2">
-                <button onclick="exportProductsPDF()" class="px-3 py-1.5 bg-gray-50 text-gray-600 text-xs rounded-lg border border-gray-200 hover:bg-gray-100 transition">📄 ส่งออก PDF นำเข้า</button>
-                <button onclick="exportToExcel()" class="px-3 py-1.5 bg-gray-50 text-gray-600 text-xs rounded-lg border border-gray-200 hover:bg-gray-100 transition">📊 ส่งออก Excel</button>
+                <button class="px-3 py-1.5 bg-gray-50 text-gray-600 text-xs rounded-lg border border-gray-200 hover:bg-gray-100">📄 ส่งออก PDF นำเข้า</button>
+                <button class="px-3 py-1.5 bg-gray-50 text-gray-600 text-xs rounded-lg border border-gray-200 hover:bg-gray-100">📑 PDF ประวัติสต็อก</button>
+                <button class="px-3 py-1.5 bg-gray-50 text-gray-600 text-xs rounded-lg border border-gray-200 hover:bg-gray-100">📊 ส่งออก Excel</button>
                 <button onclick="openModal()" class="px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-xl hover:bg-blue-700 shadow-sm transition">+ เพิ่มสินค้าใหม่</button>
             </div>
         </header>
@@ -64,6 +62,7 @@
             <div class="p-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3">
                 <div class="flex space-x-6 text-sm font-medium border-b border-gray-100 w-full md:w-auto">
                     <button class="pb-2 text-blue-600 border-b-2 border-blue-600 font-semibold">คลังสินค้า</button>
+                    <button class="pb-2 text-gray-400 hover:text-gray-600">ประวัติความเคลื่อนไหว</button>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
                     <div class="relative flex-1 md:w-64">
@@ -179,8 +178,7 @@
 
     <script>
         const SUPABASE_URL = 'https://qoltfllmlghwjvnyzsmw.supabase.co';
-        // นำค่า anon key ตัวจริงที่ขึ้นต้นด้วย eyJhbGciOi... มาใส่แทนที่บรรทัดด้านล่างนี้
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; 
+        const SUPABASE_ANON_KEY = 'sb_publishable_16ovxA1x3Zr38PHWohJlA_sB0GeV5B5k1sVq1a91M';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let products = [];
@@ -190,12 +188,6 @@
                 const { data, error } = await supabaseClient.from('products').select('*').order('id', { ascending: false });
                 if (error) {
                     console.error('Error fetching:', error);
-                    document.getElementById('productTableBody').innerHTML = `
-                        <tr><td colspan="7" class="p-8 text-center text-red-500 font-medium">
-                            เชื่อมต่อ Supabase ล้มเหลว (${error.message})<br>
-                            <span class="text-xs text-gray-500">กรุณาตรวจสอบว่าใส่ Anon Key ถูกต้อง และปิด RLS ของตารางแล้วหรือไม่</span>
-                        </td></tr>
-                    `;
                     return;
                 }
                 products = data || [];
@@ -203,11 +195,6 @@
                 renderTable();
             } catch (err) {
                 console.error('Unexpected error:', err);
-                document.getElementById('productTableBody').innerHTML = `
-                    <tr><td colspan="7" class="p-8 text-center text-red-500">
-                        ไม่สามารถเชื่อมต่อไปยังเซิร์ฟเวอร์ Supabase ได้ (Failed to fetch)
-                    </td></tr>
-                `;
             }
         }
 
@@ -251,7 +238,7 @@
                     tbody.innerHTML += `
                         <tr class="hover:bg-gray-50/50">
                             <td class="p-3.5"><img src="${p.image || 'https://via.placeholder.com/40'}" class="w-9 h-9 object-cover rounded-lg border border-gray-100 shadow-sm"></td>
-                            <td class="p-3.5 text-gray-500">${p.size || '-'}</td>
+                            <td class="p-3.5 text-gray-500">${p.size}</td>
                             <td class="p-3.5 font-bold text-gray-900">${p.name}</td>
                             <td class="p-3.5"><span class="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full text-xs font-medium">${p.category}</span></td>
                             <td class="p-3.5"><span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full text-xs">${p.quantity}</span></td>
@@ -287,7 +274,7 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // ระบบบีบอัดรูปภาพอัตโนมัติ บันทึกลงตารางโดยตรง ป้องกันข้อผิดพลาดเน็ตเวิร์ก
+        // ระบบบีบอัดรูปภาพอัจฉริยะ (ส่งตรงเข้าฐานข้อมูล 100% ปลอดภัยจาก Failed to fetch)
         function processImageFile(file) {
             if (file) {
                 document.getElementById('fileName').innerText = file.name;
@@ -299,8 +286,8 @@
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
                         
-                        const MAX_WIDTH = 120;
-                        const MAX_HEIGHT = 120;
+                        const MAX_WIDTH = 100;
+                        const MAX_HEIGHT = 100;
                         let width = img.width;
                         let height = img.height;
 
@@ -313,7 +300,7 @@
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
                         
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
                         document.getElementById('imageUrl').value = dataUrl;
                         document.getElementById('imagePreviewBox').innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
                     }
@@ -346,8 +333,8 @@
             const name = document.getElementById('name').value;
             const size = document.getElementById('size').value;
             const category = document.getElementById('category').value;
-            const quantity = parseInt(document.getElementById('quantity').value) || 0;
-            const minStock = parseInt(document.getElementById('minStock').value) || 0;
+            const quantity = parseInt(document.getElementById('quantity').value);
+            const minStock = parseInt(document.getElementById('minStock').value);
             let image = document.getElementById('imageUrl').value;
 
             if (!image && id) {
@@ -358,19 +345,21 @@
             const productData = { name, size, category, quantity, minStock, image };
 
             try {
-                let res;
+                let error = null;
                 if (id) {
-                    res = await supabaseClient.from('products').update(productData).eq('id', id);
+                    const res = await supabaseClient.from('products').update(productData).eq('id', id);
+                    error = res.error;
                 } else {
-                    res = await supabaseClient.from('products').insert([productData]);
+                    const res = await supabaseClient.from('products').insert([productData]);
+                    error = res.error;
                 }
 
                 btn.innerText = 'บันทึกข้อมูล';
                 btn.disabled = false;
 
-                if (res.error) {
-                    alert('เกิดข้อผิดพลาดในการบันทึก: ' + res.error.message);
-                    console.error(res.error);
+                if (error) {
+                    alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
+                    console.error(error);
                     return;
                 }
 
@@ -379,7 +368,7 @@
             } catch (err) {
                 btn.innerText = 'บันทึกข้อมูล';
                 btn.disabled = false;
-                alert('เกิดข้อผิดพลาด: ' + err.message + '\nกรุณาตรวจสอบว่าใส่ Supabase Anon Key ถูกต้องหรือไม่');
+                alert('เกิดข้อผิดพลาด: ' + err.message);
                 console.error(err);
             }
         }
@@ -390,7 +379,7 @@
             const newQty = Math.max(0, p.quantity + amount);
             const { error } = await supabaseClient.from('products').update({ quantity: newQty }).eq('id', id);
             if (error) {
-                alert('เกิดข้อผิดพลาดในการอัปเดตสต็อก: ' + error.message);
+                alert('เกิดข้อผิดพลาดในการอัปเดตสต็อก');
                 return;
             }
             fetchProducts();
@@ -420,73 +409,11 @@
             if (confirm('คุณต้องการลบสินค้านี้ใช่หรือไม่?')) {
                 const { error } = await supabaseClient.from('products').delete().eq('id', id);
                 if (error) {
-                    alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + error.message);
+                    alert('เกิดข้อผิดพลาดในการลบข้อมูล');
                     return;
                 }
                 fetchProducts();
             }
-        }
-
-        // ส่งออกเอกสาร PDF
-        function exportProductsPDF() {
-            if (products.length === 0) {
-                alert('ไม่มีข้อมูลสินค้าสำหรับส่งออก PDF');
-                return;
-            }
-            const rowsHtml = products.map((p, index) => `
-                <tr style="border-bottom: 1px solid #e5e7eb;">
-                    <td style="padding: 8px; text-align: center;">${index + 1}</td>
-                    <td style="padding: 8px; font-weight: bold;">${p.name}</td>
-                    <td style="padding: 8px;">${p.size || '-'}</td>
-                    <td style="padding: 8px;">${p.category}</td>
-                    <td style="padding: 8px; text-align: center; font-weight: bold; color: ${Number(p.quantity) <= Number(p.minStock) ? '#dc2626' : '#16a34a'};">${p.quantity}</td>
-                </tr>
-            `).join('');
-
-            const element = document.createElement('div');
-            element.innerHTML = `
-                <div style="font-family: sans-serif; padding: 20px; color: #1f2937;">
-                    <h2 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">รายงานรายการสินค้าคงคลัง (StockMaster)</h2>
-                    <p style="font-size: 11px; color: #6b7280; margin-bottom: 15px;">วันที่ออกเอกสาร: ${new Date().toLocaleString('th-TH')}</p>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
-                        <thead>
-                            <tr style="background-color: #f9fafb; border-bottom: 2px solid #e5e7eb;">
-                                <th style="padding: 8px; text-align: center;">ลำดับ</th>
-                                <th style="padding: 8px;">ชื่อสินค้า</th>
-                                <th style="padding: 8px;">ขนาด/SKU</th>
-                                <th style="padding: 8px;">หมวดหมู่</th>
-                                <th style="padding: 8px; text-align: center;">คงเหลือ</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rowsHtml}</tbody>
-                    </table>
-                </div>
-            `;
-            html2pdf().from(element).set({
-                margin: 10,
-                filename: `Stock_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
-                html2canvas: { scale: 2 },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            }).save();
-        }
-
-        // ส่งออกเอกสาร Excel
-        function exportToExcel() {
-            if (products.length === 0) {
-                alert('ไม่มีข้อมูลสินค้าสำหรับส่งออก Excel');
-                return;
-            }
-            const rows = products.map(p => ({
-                'ขนาด/SKU': p.size || '',
-                'ชื่อสินค้า': p.name,
-                'หมวดหมู่': p.category,
-                'จำนวนคงเหลือ': p.quantity,
-                'จุดเตือนสต็อก': p.minStock
-            }));
-            const ws = XLSX.utils.json_to_sheet(rows);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "คลังสินค้า");
-            XLSX.writeFile(wb, `Stock_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
         }
 
         fetchProducts();
