@@ -231,7 +231,7 @@
 
                 <div class="flex items-center justify-end gap-2 pt-3 border-t">
                     <button type="button" onclick="closeModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition">ยกเลิก</button>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition">บันทึกข้อมูล</button>
+                    <button id="submitBtn" type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition">บันทึกข้อมูล</button>
                 </div>
             </form>
         </div>
@@ -244,7 +244,6 @@
         let currentBase64Image = '';
         let editingProductId = null;
 
-        // เรียกใช้งานและเรนเดอร์ไอคอนเมื่อโหลด DOM เสร็จสมบูรณ์
         document.addEventListener('DOMContentLoaded', () => {
             if (window.lucide) {
                 lucide.createIcons();
@@ -253,8 +252,8 @@
             fetchLogs();
         });
 
-        // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression)
-        function compressImage(src, maxWidth, maxHeight, quality) {
+        // ฟังก์ชันบีบอัดรูปภาพให้อยู่ในขนาดกะทัดรัด (ไม่เกิน 500 KB)
+        function compressImage(src, maxWidth = 600, maxHeight = 600, quality = 0.6) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.crossOrigin = 'Anonymous';
@@ -362,7 +361,7 @@
             }
         }
 
-        // 5. บันทึกข้อมูล
+        // 5. บันทึกข้อมูล (เพิ่มใหม่/แก้ไข)
         async function handleFormSubmit(e) {
             e.preventDefault();
 
@@ -370,6 +369,11 @@
                 alert('กรุณาใส่รูปภาพสินค้าก่อนบันทึก');
                 return;
             }
+
+            const submitBtn = document.getElementById('submitBtn');
+            const originalBtnText = submitBtn.innerText;
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'กำลังบันทึก...';
 
             const body = {
                 name: document.getElementById('formName').value.trim(),
@@ -407,6 +411,9 @@
             } catch (err) {
                 console.error("Submit error:", err);
                 alert('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้: ' + err.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = originalBtnText;
             }
         }
 
@@ -418,7 +425,7 @@
             const reader = new FileReader();
             reader.onload = async function(evt) {
                 try {
-                    const compressed = await compressImage(evt.target.result, 800, 800, 0.7);
+                    const compressed = await compressImage(evt.target.result);
                     setImagePreview(compressed);
                 } catch (err) {
                     setImagePreview(evt.target.result);
@@ -446,7 +453,7 @@
                             const reader = new FileReader();
                             reader.onload = async function(evt) {
                                 try {
-                                    const compressed = await compressImage(evt.target.result, 800, 800, 0.7);
+                                    const compressed = await compressImage(evt.target.result);
                                     setImagePreview(compressed);
                                 } catch (err) {
                                     setImagePreview(evt.target.result);
