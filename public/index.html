@@ -110,7 +110,7 @@
             <form id="productForm" onsubmit="saveProduct(event)">
                 <input type="hidden" id="productId">
                 <div class="space-y-4">
-                    <!-- รูปภาพสินค้า (อัปโหลด / Ctrl+V) -->
+                    <!-- รูปภาพสินค้า (อัปโหลดไฟล์ / Ctrl+V) -->
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">รูปภาพสินค้า <span class="text-red-500">(จำเป็นต้องใส่)</span></label>
                         <div class="border-2 border-dashed border-gray-200 rounded-2xl p-4 text-center bg-gray-50/50 relative hover:border-blue-400 transition">
@@ -182,6 +182,7 @@
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let products = [];
+        let selectedFile = null;
 
         async function fetchProducts() {
             try {
@@ -213,7 +214,7 @@
             const tbody = document.getElementById('productTableBody');
             const search = document.getElementById('searchInput').value.toLowerCase();
             const catFilter = document.getElementById('categoryFilter').value;
-            const stockFilter = document.getElementById('stockFilter').value;
+            const stockFilter = document.getElementById('stockFilter'].value;
 
             tbody.innerHTML = '';
             let totalStock = 0;
@@ -264,6 +265,7 @@
             document.getElementById('productForm').reset();
             document.getElementById('productId').value = '';
             document.getElementById('imageUrl').value = '';
+            selectedFile = null;
             document.getElementById('fileName').innerText = 'No file chosen';
             document.getElementById('imagePreviewBox').innerHTML = '📁';
             document.getElementById('modalTitle').innerText = 'เพิ่มสินค้าใหม่';
@@ -274,50 +276,27 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // ระบบย่อและบีบอัดภาพอัตโนมัติ ป้องกัน Failed to fetch 100%
-        function processImageFile(file) {
+        function handleFile(file) {
             if (file) {
+                selectedFile = file;
                 document.getElementById('fileName').innerText = file.name;
                 const reader = new FileReader();
-                reader.onload = function(event) {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = function() {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        
-                        const MAX_WIDTH = 120;
-                        const MAX_HEIGHT = 120;
-                        let width = img.width;
-                        let height = img.height;
-
-                        if (width > height) {
-                            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                        } else {
-                            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-                        }
-                        canvas.width = width;
-                        canvas.height = height;
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-                        document.getElementById('imageUrl').value = dataUrl;
-                        document.getElementById('imagePreviewBox').innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
-                    }
+                reader.onload = function(e) {
+                    document.getElementById('imagePreviewBox').innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover">`;
                 }
                 reader.readAsDataURL(file);
             }
         }
 
         document.getElementById('imageFile').addEventListener('change', function(e) {
-            processImageFile(e.target.files[0]);
+            handleFile(e.target.files[0]);
         });
 
         window.addEventListener('paste', function(e) {
             const items = (e.clipboardData || e.originalEvent.clipboardData).items;
             for (let item of items) {
                 if (item.type.indexOf('image') === 0) {
-                    processImageFile(item.getAsFile());
+                    handleFile(item.getAsFile());
                     break;
                 }
             }
@@ -335,16 +314,37 @@
             const category = document.getElementById('category').value;
             const quantity = parseInt(document.getElementById('quantity').value);
             const minStock = parseInt(document.getElementById('minStock').value);
-            let image = document.getElementById('imageUrl').value;
-
-            if (!image && id) {
-                const oldP = products.find(p => p.id == id);
-                if (oldP) image = oldP.image;
-            }
-
-            const productData = { name, size, category, quantity, minStock, image };
+            
+            let imageUrl = document.getElementById('imageUrl').value;
 
             try {
+                if (selectedFile) {
+                    const fileName = `${Date.now()}_${selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '')}`;
+                    const { data: uploadData, error: uploadError } = await supabaseClient.storage
+                        .from('product-images')
+                        .upload(fileName, selectedFile);
+
+                    if (uploadError) {
+                        alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ: ' + uploadError.message);
+                        btn.innerText = 'บันทึกข้อมูล';
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    const { data: publicUrlData } = supabaseClient.storage
+                        .from('product-images')
+                        .getPublicUrl(fileName);
+
+                    imageUrl = publicUrlData.publicUrl;
+                }
+
+                if (!imageUrl && id) {
+                    const oldP = products.find(p => p.id == id);
+                    if (oldP) imageUrl = oldP.image;
+                }
+
+                const productData = { name, size, category, quantity, minStock, image: imageUrl };
+
                 let error = null;
                 if (id) {
                     const res = await supabaseClient.from('products').update(productData).eq('id', id);
@@ -395,6 +395,7 @@
             document.getElementById('quantity').value = p.quantity;
             document.getElementById('minStock').value = p.minStock;
             document.getElementById('imageUrl').value = p.image || '';
+            selectedFile = null;
             document.getElementById('fileName').innerText = p.image ? 'มีรูปภาพเดิมอยู่แล้ว' : 'No file chosen';
             if (p.image) {
                 document.getElementById('imagePreviewBox').innerHTML = `<img src="${p.image}" class="w-full h-full object-cover">`;
