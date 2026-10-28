@@ -102,52 +102,74 @@
         </div>
     </div>
 
-    <!-- Modal เพิ่ม/แก้ไขสินค้า (ดีไซน์ดั้งเดิมเป๊ะๆ) -->
+    <!-- Modal เพิ่ม/แก้ไขสินค้า (ดีไซน์เหมือนภาพที่ 2 เป๊ะๆ) -->
     <div id="productModal" class="fixed inset-0 bg-black/40 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl transition-all transform scale-100">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-lg">✕</button>
             <h2 id="modalTitle" class="text-base font-bold text-gray-900 mb-4">เพิ่มสินค้าใหม่</h2>
             <form id="productForm" onsubmit="saveProduct(event)">
                 <input type="hidden" id="productId">
                 <div class="space-y-4">
+                    <!-- รูปภาพสินค้าแบบมีกรอบประปะ -->
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">ชื่อสินค้า</label>
-                        <input type="text" id="name" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500">
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-xs text-gray-500 mb-1">ขนาด/SKU</label>
-                            <input type="text" id="size" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-500 mb-1">หมวดหมู่</label>
-                            <input type="text" id="category" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-xs text-gray-500 mb-1">จำนวนเริ่มต้น</label>
-                            <input type="number" id="quantity" value="0" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-500 mb-1">แจ้งเตือนขั้นต่ำ</label>
-                            <input type="number" id="minStock" value="5" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500">
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-xs text-gray-500 mb-1">รูปภาพสินค้า</label>
-                        <div class="flex items-center space-x-3">
-                            <label class="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer hover:bg-blue-700 transition">
-                                เลือกไฟล์
-                                <input type="file" id="imageFile" accept="image/*" class="hidden">
-                            </label>
-                            <span id="fileName" class="text-xs text-gray-400">ไม่ได้เลือกไฟล์ใด</span>
+                        <label class="block text-xs text-gray-500 mb-1">รูปภาพสินค้า <span class="text-red-500">(จำเป็นต้องใส่)</span></label>
+                        <div class="border-2 border-dashed border-gray-200 rounded-2xl p-4 text-center bg-gray-50/50 relative hover:border-blue-400 transition">
+                            <input type="file" id="imageFile" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer">
+                            <div class="flex items-center justify-center space-x-3">
+                                <div id="imagePreviewBox" class="w-12 h-12 bg-white rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 shadow-sm overflow-hidden">
+                                    📁
+                                </div>
+                                <div class="text-left">
+                                    <p class="text-xs text-gray-600">กด <span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">Ctrl + V</span> วางรูปภาพได้เลย</p>
+                                    <p class="text-[11px] text-gray-400 mt-0.5">หรือคลิกปุ่มเพื่อเลือกไฟล์จากเครื่อง</p>
+                                    <button type="button" class="mt-1 px-3 py-1 bg-blue-600 text-white text-[11px] font-medium rounded-lg shadow-sm hover:bg-blue-700">Choose File</button>
+                                    <span id="fileName" class="text-[11px] text-gray-400 ml-2">No file chosen</span>
+                                </div>
+                            </div>
                         </div>
                         <input type="hidden" id="imageUrl">
                     </div>
+
+                    <!-- ขนาดสินค้า / SKU -->
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">ขนาดสินค้า / SKU</label>
+                        <input type="text" id="size" placeholder="เช่น เล็ก, กลาง, จัมโบ้ หรือ 01" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 placeholder-gray-300">
+                    </div>
+
+                    <!-- ชื่อสินค้า -->
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">ชื่อสินค้า <span class="text-red-500">*</span></label>
+                        <input type="text" id="name" placeholder="เช่น น้ำพริกอ่อง" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 placeholder-gray-300">
+                    </div>
+
+                    <!-- หมวดหมู่ -->
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">หมวดหมู่ <span class="text-red-500">*</span></label>
+                        <select id="category" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none bg-white text-gray-700 focus:border-blue-500">
+                            <option value="">-- เลือกหมวดหมู่ --</option>
+                            <option value="น้ำพริก">น้ำพริก</option>
+                            <option value="อาหารแห้ง">อาหารแห้ง</option>
+                            <option value="เครื่องดื่ม">เครื่องดื่ม</option>
+                            <option value="อื่นๆ">อื่นๆ</option>
+                        </select>
+                    </div>
+
+                    <!-- จำนวนคงเหลือ & เตือนเมื่อสต็อกต่ำกว่า -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">จำนวนคงเหลือ <span class="text-red-500">*</span></label>
+                            <input type="number" id="quantity" value="0" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">เตือนเมื่อสต็อกต่ำกว่า <span class="text-red-500">*</span></label>
+                            <input type="number" id="minStock" value="5" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500">
+                        </div>
+                    </div>
                 </div>
+
                 <div class="flex justify-end space-x-2 mt-6">
-                    <button type="button" onclick="closeModal()" class="px-4 py-2 text-xs text-gray-500 hover:bg-gray-100 rounded-xl transition">ยกเลิก</button>
-                    <button type="submit" id="submitBtn" class="px-5 py-2 text-xs bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition">บันทึก</button>
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-xl transition">ยกเลิก</button>
+                    <button type="submit" id="submitBtn" class="px-5 py-2 text-xs bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 shadow-md transition">บันทึกข้อมูล</button>
                 </div>
             </form>
         </div>
@@ -237,7 +259,8 @@
             document.getElementById('productForm').reset();
             document.getElementById('productId').value = '';
             document.getElementById('imageUrl').value = '';
-            document.getElementById('fileName').innerText = 'ไม่ได้เลือกไฟล์ใด';
+            document.getElementById('fileName').innerText = 'No file chosen';
+            document.getElementById('imagePreviewBox').innerHTML = '📁';
             document.getElementById('modalTitle').innerText = 'เพิ่มสินค้าใหม่';
             document.getElementById('productModal').classList.remove('hidden');
         }
@@ -246,9 +269,8 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // ระบบบีบอัดภาพอัตโนมัติป้องกัน Error 413
-        document.getElementById('imageFile').addEventListener('change', function(e) {
-            const file = e.target.files[0];
+        // รองรับการกด Ctrl + V วางรูปภาพ และเลือกไฟล์ พร้อมบีบอัดอัตโนมัติ
+        function processImageFile(file) {
             if (file) {
                 document.getElementById('fileName').innerText = file.name;
                 const reader = new FileReader();
@@ -271,10 +293,26 @@
                         canvas.width = width;
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
-                        document.getElementById('imageUrl').value = canvas.toDataURL('image/jpeg', 0.6);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                        document.getElementById('imageUrl').value = dataUrl;
+                        document.getElementById('imagePreviewBox').innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
                     }
                 }
                 reader.readAsDataURL(file);
+            }
+        }
+
+        document.getElementById('imageFile').addEventListener('change', function(e) {
+            processImageFile(e.target.files[0]);
+        });
+
+        window.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.type.indexOf('image') === 0) {
+                    processImageFile(item.getAsFile());
+                    break;
+                }
             }
         });
 
@@ -305,7 +343,7 @@
                 await supabaseClient.from('products').insert([productData]);
             }
 
-            btn.innerText = 'บันทึก';
+            btn.innerText = 'บันทึกข้อมูล';
             btn.disabled = false;
             closeModal();
             fetchProducts();
@@ -329,7 +367,12 @@
             document.getElementById('quantity').value = p.quantity;
             document.getElementById('minStock').value = p.minStock;
             document.getElementById('imageUrl').value = p.image || '';
-            document.getElementById('fileName').innerText = p.image ? 'มีรูปภาพเดิมอยู่แล้ว' : 'ไม่ได้เลือกไฟล์ใด';
+            document.getElementById('fileName').innerText = p.image ? 'มีรูปภาพเดิมอยู่แล้ว' : 'No file chosen';
+            if (p.image) {
+                document.getElementById('imagePreviewBox').innerHTML = `<img src="${p.image}" class="w-full h-full object-cover">`;
+            } else {
+                document.getElementById('imagePreviewBox').innerHTML = '📁';
+            }
             document.getElementById('modalTitle').innerText = 'แก้ไขสินค้า';
             document.getElementById('productModal').classList.remove('hidden');
         }
