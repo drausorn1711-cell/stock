@@ -274,7 +274,7 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // ระบบรองรับภาพขนาดใหญ่โดยการปรับสัดส่วนและบีบอัดอย่างเหมาะสมเพื่อความเสถียรสูงสุด
+        // ปรับจูนขนาดภาพให้เหมาะสม (Max 300px และบีบอัดพอเหมาะ เพื่อไม่ให้เกิดปัญหา Failed to fetch บน Supabase)
         function processImageFile(file) {
             if (file) {
                 document.getElementById('fileName').innerText = file.name;
@@ -286,9 +286,8 @@
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
                         
-                        // รองรับขนาดภาพที่ใหญ่ขึ้น (ความกว้าง/สูงสูงสุด 600px เพื่อให้ภาพคมชัดและขนาดไฟล์ปลอดภัย)
-                        const MAX_WIDTH = 600;
-                        const MAX_HEIGHT = 600;
+                        const MAX_WIDTH = 300;
+                        const MAX_HEIGHT = 300;
                         let width = img.width;
                         let height = img.height;
 
@@ -301,8 +300,7 @@
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
                         
-                        // ปรับคุณภาพที่ 75% ให้ภาพสวยคมชัดแต่ไม่หนักเกินไป
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
                         document.getElementById('imageUrl').value = dataUrl;
                         document.getElementById('imagePreviewBox').innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
                     }
