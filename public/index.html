@@ -237,7 +237,7 @@
         </div>
     </div>
 
-    <!-- JavaScript การทำงานของระบบ -->
+    <!-- JavaScript ระบบ LocalStorage ทำงานบน Browser ทันที -->
     <script>
         let products = [];
         let logs = [];
@@ -248,12 +248,31 @@
             if (window.lucide) {
                 lucide.createIcons();
             }
-            fetchProducts();
-            fetchLogs();
+            loadData();
         });
 
-        // ฟังก์ชันบีบอัดรูปภาพให้อยู่ในขนาดกะทัดรัด (ไม่เกิน 500 KB)
-        function compressImage(src, maxWidth = 600, maxHeight = 600, quality = 0.6) {
+        // โหลดข้อมูลจาก LocalStorage
+        function loadData() {
+            try {
+                const savedProducts = localStorage.getItem('stockmaster_products');
+                const savedLogs = localStorage.getItem('stockmaster_logs');
+                products = savedProducts ? JSON.parse(savedProducts) : [];
+                logs = savedLogs ? JSON.parse(savedLogs) : [];
+            } catch (err) {
+                products = [];
+                logs = [];
+            }
+            renderDashboard();
+        }
+
+        // บันทึกข้อมูลลง LocalStorage
+        function saveData() {
+            localStorage.setItem('stockmaster_products', JSON.stringify(products));
+            localStorage.setItem('stockmaster_logs', JSON.stringify(logs));
+        }
+
+        // ฟังก์ชันบีบอัดรูปภาพ
+        function compressImage(src, maxWidth = 500, maxHeight = 500, quality = 0.5) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.crossOrigin = 'Anonymous';
@@ -288,34 +307,8 @@
             });
         }
 
-        // 1. ดึงข้อมูลสินค้า
-        async function fetchProducts() {
-            try {
-                const res = await fetch('/api/products?t=' + new Date().getTime());
-                if (!res.ok) return;
-                const data = await res.json();
-                products = Array.isArray(data) ? data : [];
-                renderDashboard();
-            } catch (err) {
-                console.error("Error fetching products:", err);
-            }
-        }
-
-        // 2. ดึงข้อมูลประวัติ
-        async function fetchLogs() {
-            try {
-                const res = await fetch('/api/logs?t=' + new Date().getTime());
-                if (!res.ok) return;
-                const data = await res.json();
-                logs = Array.isArray(data) ? data : [];
-                renderLogsTable();
-            } catch (err) {
-                console.error("Error fetching logs:", err);
-            }
-        }
-
-        // 3. ปรับสต๊อก (+1 / -1)
-        async function adjustStock(id, changeAmount) {
+        // ปรับสต๊อก (+1 / -1)
+        function adjustStock(id, changeAmount) {
             const product = products.find(p => p.id === Number(id));
             if (!product) return;
 
@@ -324,45 +317,33 @@
                 return;
             }
 
-            const oldQty = product.quantity;
             product.quantity = Number(product.quantity) + changeAmount;
+            
+            // บันทึก Log ประวัติ
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH');
+            logs.unshift({
+                date: dateStr,
+                productName: product.name,
+                type: changeAmount > 0 ? 'รับเข้า' : 'เบิกออก',
+                amount: Math.abs(changeAmount),
+                note: 'ปรับสต็อกด่วน'
+            });
+
+            saveData();
             renderDashboard();
-
-            try {
-                const res = await fetch(`/api/products/${id}/stock`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ changeAmount })
-                });
-
-                if (!res.ok) throw new Error('Failed to update');
-                fetchLogs();
-            } catch (err) {
-                console.error(err);
-                product.quantity = oldQty;
-                renderDashboard();
-                alert('ไม่สามารถปรับปรุงสต็อกไปยังเซิร์ฟเวอร์ได้');
-            }
         }
 
-        // 4. ลบสินค้า
-        async function deleteProduct(id) {
+        // ลบสินค้า
+        function deleteProduct(id) {
             if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสินค้ารายการนี้?')) return;
-            try {
-                const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
-                if (res.ok) {
-                    fetchProducts();
-                    fetchLogs();
-                } else {
-                    alert('เกิดข้อผิดพลาดในการลบสินค้า');
-                }
-            } catch (err) {
-                alert('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
-            }
+            products = products.filter(p => p.id !== Number(id));
+            saveData();
+            renderDashboard();
         }
 
-        // 5. บันทึกข้อมูล (เพิ่มใหม่/แก้ไข)
-        async function handleFormSubmit(e) {
+        // บันทึกฟอร์ม (เพิ่มใหม่ / แก้ไข)
+        function handleFormSubmit(e) {
             e.preventDefault();
 
             if (!currentBase64Image) {
@@ -370,54 +351,60 @@
                 return;
             }
 
-            const submitBtn = document.getElementById('submitBtn');
-            const originalBtnText = submitBtn.innerText;
-            submitBtn.disabled = true;
-            submitBtn.innerText = 'กำลังบันทึก...';
+            const name = document.getElementById('formName').value.trim();
+            const size = document.getElementById('formSize').value.trim();
+            const category = document.getElementById('formCategory').value.trim();
+            const quantity = parseInt(document.getElementById('formQuantity').value) || 0;
+            const minStock = parseInt(document.getElementById('formMinStock').value) || 0;
 
-            const body = {
-                name: document.getElementById('formName').value.trim(),
-                size: document.getElementById('formSize').value.trim(),
-                category: document.getElementById('formCategory').value.trim(),
-                price: 0,
-                quantity: parseInt(document.getElementById('formQuantity').value) || 0,
-                minStock: parseInt(document.getElementById('formMinStock').value) || 0,
-                image: currentBase64Image
-            };
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH');
 
-            try {
-                const url = editingProductId ? `/api/products/${editingProductId}` : '/api/products';
-                const method = editingProductId ? 'PUT' : 'POST';
-
-                const res = await fetch(url, {
-                    method: method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-
-                if (res.ok) {
-                    closeModal();
-                    fetchProducts();
-                    fetchLogs();
-                } else {
-                    const text = await res.text();
-                    try {
-                        const errData = JSON.parse(text);
-                        alert('เกิดข้อผิดพลาด: ' + (errData.error || 'บันทึกไม่สำเร็จ'));
-                    } catch {
-                        alert(`เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ (รหัส ${res.status}): ${text}`);
-                    }
+            if (editingProductId) {
+                // โหมดแก้ไข
+                const p = products.find(item => item.id === Number(editingProductId));
+                if (p) {
+                    p.name = name;
+                    p.size = size;
+                    p.category = category;
+                    p.quantity = quantity;
+                    p.minStock = minStock;
+                    p.image = currentBase64Image;
                 }
-            } catch (err) {
-                console.error("Submit error:", err);
-                alert('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้: ' + err.message);
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerText = originalBtnText;
+                logs.unshift({
+                    date: dateStr,
+                    productName: name,
+                    type: 'แก้ไขข้อมูล',
+                    amount: quantity,
+                    note: 'อัปเดตข้อมูลสินค้า'
+                });
+            } else {
+                // โหมดเพิ่มใหม่
+                const newProduct = {
+                    id: Date.now(),
+                    name,
+                    size,
+                    category,
+                    quantity,
+                    minStock,
+                    image: currentBase64Image
+                };
+                products.push(newProduct);
+                logs.unshift({
+                    date: dateStr,
+                    productName: name,
+                    type: 'รับเข้า',
+                    amount: quantity,
+                    note: 'เพิ่มสินค้าใหม่เข้าคลัง'
+                });
             }
+
+            saveData();
+            closeModal();
+            renderDashboard();
         }
 
-        // 6. จัดการอัปโหลดรูปภาพผ่านปุ่ม
+        // อัปโหลดรูปภาพผ่านปุ่ม
         function handleImageUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -468,7 +455,7 @@
             }
         });
 
-        // 7. คำนวณสถิติ
+        // คำนวณสถิติ
         function renderStats() {
             const totalItems = products.length;
             const totalStock = products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0);
@@ -479,7 +466,7 @@
             document.getElementById('statLowStock').innerText = lowStock.toLocaleString('th-TH');
         }
 
-        // 8. แสดงผลตารางสินค้า
+        // แสดงผลตารางสินค้า
         function renderTable() {
             const tbody = document.getElementById('productTableBody');
             const search = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -551,7 +538,7 @@
             if (window.lucide) lucide.createIcons();
         }
 
-        // 9. แสดงผลตาราง Logs
+        // แสดงผลตาราง Logs
         function renderLogsTable() {
             const tbody = document.getElementById('logsTableBody');
             if (logs.length === 0) {
@@ -575,6 +562,8 @@
         function renderDashboard() {
             renderStats();
             renderTable();
+            renderLogsTable();
+            if (window.lucide) lucide.createIcons();
         }
 
         // สลับแท็บ
