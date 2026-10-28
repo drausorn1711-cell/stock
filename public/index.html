@@ -102,9 +102,9 @@
         </div>
     </div>
 
-    <!-- Modal เพิ่ม/แก้ไขสินค้า (ดีไซน์แบบเดิมในภาพ 13) -->
+    <!-- Modal เพิ่ม/แก้ไขสินค้า (ดีไซน์ดั้งเดิมเป๊ะๆ) -->
     <div id="productModal" class="fixed inset-0 bg-black/40 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl transition-all transform scale-100">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl transition-all transform scale-100">
             <h2 id="modalTitle" class="text-base font-bold text-gray-900 mb-4">เพิ่มสินค้าใหม่</h2>
             <form id="productForm" onsubmit="saveProduct(event)">
                 <input type="hidden" id="productId">
@@ -135,8 +135,8 @@
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">รูปภาพสินค้า</label>
-                        <div class="flex items-center space-x-2">
-                            <label class="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer hover:bg-blue-100 border border-blue-100 transition">
+                        <div class="flex items-center space-x-3">
+                            <label class="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer hover:bg-blue-700 transition">
                                 เลือกไฟล์
                                 <input type="file" id="imageFile" accept="image/*" class="hidden">
                             </label>
@@ -246,7 +246,7 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // ระบบบีบอัดภาพเพื่อป้องกันข้อผิดพลาด 413
+        // ระบบบีบอัดภาพอัตโนมัติป้องกัน Error 413
         document.getElementById('imageFile').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
@@ -258,8 +258,8 @@
                     img.onload = function() {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        const MAX_WIDTH = 200;
-                        const MAX_HEIGHT = 200;
+                        const MAX_WIDTH = 250;
+                        const MAX_HEIGHT = 250;
                         let width = img.width;
                         let height = img.height;
 
