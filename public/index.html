@@ -274,7 +274,7 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
-        // ระบบบีบอัดรูปภาพให้เหลือขนาดจิ๋ว ป้องกัน Failed to fetch 100%
+        // ระบบบีบอัดภาพขั้นสูงสุด (ขนาดจิ๋ว ไม่เกิน 10-20 KB) ป้องกัน Failed to fetch 100%
         function processImageFile(file) {
             if (file) {
                 document.getElementById('fileName').innerText = file.name;
@@ -286,8 +286,8 @@
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
                         
-                        const MAX_WIDTH = 120;
-                        const MAX_HEIGHT = 120;
+                        const MAX_WIDTH = 60;
+                        const MAX_HEIGHT = 60;
                         let width = img.width;
                         let height = img.height;
 
@@ -300,8 +300,7 @@
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
                         
-                        // บีบอัดไฟล์ JPEG คุณภาพ 0.4 เพื่อให้อยู่ในขนาดไม่เกิน 30-50 KB
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
                         document.getElementById('imageUrl').value = dataUrl;
                         document.getElementById('imagePreviewBox').innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
                     }
