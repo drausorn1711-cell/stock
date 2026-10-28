@@ -9,8 +9,10 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "serverless-http": "^4.0.0",
     "sqlite3": "^5.1.7"
   }
 }

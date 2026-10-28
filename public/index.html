@@ -308,12 +308,17 @@
         async function fetchProducts() {
             try {
                 const res = await fetch('/api/products?t=' + new Date().getTime());
-                if (!res.ok) return;
+                if (!res.ok) {
+                    console.error("fetchProducts failed with status:", res.status);
+                    renderDashboard();
+                    return;
+                }
                 const data = await res.json();
                 products = Array.isArray(data) ? data : [];
                 renderDashboard();
             } catch (err) {
                 console.error("Error fetching products:", err);
+                renderDashboard();
             }
         }
 
@@ -391,6 +396,12 @@
                 return;
             }
 
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerText = 'กำลังบันทึก...';
+            }
+
             const body = {
                 name: document.getElementById('formName').value.trim(),
                 size: document.getElementById('formSize').value.trim(),
@@ -427,6 +438,11 @@
             } catch (err) {
                 console.error("Submit error:", err);
                 alert('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้: ' + err.message);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = 'บันทึกข้อมูล';
+                }
             }
         }
 
