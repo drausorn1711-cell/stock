@@ -114,7 +114,7 @@
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">รูปภาพสินค้า <span class="text-red-500">(จำเป็นต้องใส่)</span></label>
                         <div class="border-2 border-dashed border-gray-200 rounded-2xl p-4 text-center bg-gray-50/50 relative hover:border-blue-400 transition">
-                            <input type="file" id="imageFile" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer">
+                            <input type="file" id="imageFile" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10">
                             <div class="flex items-center justify-center space-x-3">
                                 <div id="imagePreviewBox" class="w-12 h-12 bg-white rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 shadow-sm overflow-hidden">
                                     📁
@@ -122,7 +122,7 @@
                                 <div class="text-left">
                                     <p class="text-xs text-gray-600">กด <span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">Ctrl + V</span> วางรูปภาพได้เลย</p>
                                     <p class="text-[11px] text-gray-400 mt-0.5">หรือคลิกปุ่มเพื่อเลือกไฟล์จากเครื่อง</p>
-                                    <button type="button" class="mt-1 px-3 py-1 bg-blue-600 text-white text-[11px] font-medium rounded-lg shadow-sm hover:bg-blue-700">Choose File</button>
+                                    <button type="button" class="mt-1 px-3 py-1 bg-blue-600 text-white text-[11px] font-medium rounded-lg shadow-sm hover:bg-blue-700 pointer-events-none">Choose File</button>
                                     <span id="fileName" class="text-[11px] text-gray-400 ml-2">No file chosen</span>
                                 </div>
                             </div>
@@ -142,7 +142,7 @@
                         <input type="text" id="name" placeholder="เช่น น้ำพริกอ่อง" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 placeholder-gray-300">
                     </div>
 
-                    <!-- หมวดหมู่ (อัปเดตตามภาพที่ต้องการ) -->
+                    <!-- หมวดหมู่ -->
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">หมวดหมู่ <span class="text-red-500">*</span></label>
                         <select id="category" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none bg-white text-gray-700 focus:border-blue-500">
@@ -178,20 +178,24 @@
 
     <script>
         const SUPABASE_URL = 'https://qoltfllmlghwjvnyzsmw.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_16ovxA1x3Zr38PHWohJlA_sB0Ge...';
+        const SUPABASE_ANON_KEY = 'sb_publishable_16ovxA1x3Zr38PHWohJlA_sB0GeV5B5k1sVq1a91M';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let products = [];
 
         async function fetchProducts() {
-            const { data, error } = await supabaseClient.from('products').select('*').order('id', { ascending: false });
-            if (error) {
-                console.error('Error fetching:', error);
-                return;
+            try {
+                const { data, error } = await supabaseClient.from('products').select('*').order('id', { ascending: false });
+                if (error) {
+                    console.error('Error fetching:', error);
+                    return;
+                }
+                products = data || [];
+                updateCategoryDropdown();
+                renderTable();
+            } catch (err) {
+                console.error('Unexpected error:', err);
             }
-            products = data || [];
-            updateCategoryDropdown();
-            renderTable();
         }
 
         function updateCategoryDropdown() {
@@ -233,7 +237,7 @@
                 filtered.forEach(p => {
                     tbody.innerHTML += `
                         <tr class="hover:bg-gray-50/50">
-                            <td class="p-3.5"><img src="${p.image || 'https://via.placeholder.com/40'}" class="w-9 h-9 object-cover rounded-lg border border-gray-100"></td>
+                            <td class="p-3.5"><img src="${p.image || 'https://via.placeholder.com/40'}" class="w-9 h-9 object-cover rounded-lg border border-gray-100 shadow-sm"></td>
                             <td class="p-3.5 text-gray-500">${p.size}</td>
                             <td class="p-3.5 font-bold text-gray-900">${p.name}</td>
                             <td class="p-3.5"><span class="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full text-xs font-medium">${p.category}</span></td>
@@ -270,6 +274,7 @@
             document.getElementById('productModal').classList.add('hidden');
         }
 
+        // ระบบรองรับภาพขนาดใหญ่โดยการปรับสัดส่วนและบีบอัดอย่างเหมาะสมเพื่อความเสถียรสูงสุด
         function processImageFile(file) {
             if (file) {
                 document.getElementById('fileName').innerText = file.name;
@@ -280,8 +285,10 @@
                     img.onload = function() {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        const MAX_WIDTH = 250;
-                        const MAX_HEIGHT = 250;
+                        
+                        // รองรับขนาดภาพที่ใหญ่ขึ้น (ความกว้าง/สูงสูงสุด 600px เพื่อให้ภาพคมชัดและขนาดไฟล์ปลอดภัย)
+                        const MAX_WIDTH = 600;
+                        const MAX_HEIGHT = 600;
                         let width = img.width;
                         let height = img.height;
 
@@ -293,7 +300,9 @@
                         canvas.width = width;
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                        
+                        // ปรับคุณภาพที่ 75% ให้ภาพสวยคมชัดแต่ไม่หนักเกินไป
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
                         document.getElementById('imageUrl').value = dataUrl;
                         document.getElementById('imagePreviewBox').innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
                     }
@@ -337,26 +346,33 @@
 
             const productData = { name, size, category, quantity, minStock, image };
 
-            let error = null;
-            if (id) {
-                const res = await supabaseClient.from('products').update(productData).eq('id', id);
-                error = res.error;
-            } else {
-                const res = await supabaseClient.from('products').insert([productData]);
-                error = res.error;
+            try {
+                let error = null;
+                if (id) {
+                    const res = await supabaseClient.from('products').update(productData).eq('id', id);
+                    error = res.error;
+                } else {
+                    const res = await supabaseClient.from('products').insert([productData]);
+                    error = res.error;
+                }
+
+                btn.innerText = 'บันทึกข้อมูล';
+                btn.disabled = false;
+
+                if (error) {
+                    alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
+                    console.error(error);
+                    return;
+                }
+
+                closeModal();
+                fetchProducts();
+            } catch (err) {
+                btn.innerText = 'บันทึกข้อมูล';
+                btn.disabled = false;
+                alert('เกิดข้อผิดพลาด: ' + err.message);
+                console.error(err);
             }
-
-            btn.innerText = 'บันทึกข้อมูล';
-            btn.disabled = false;
-
-            if (error) {
-                alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
-                console.error(error);
-                return;
-            }
-
-            closeModal();
-            fetchProducts();
         }
 
         async function updateQty(id, amount) {
