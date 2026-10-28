@@ -250,11 +250,13 @@
             fetchLogs();
         };
 
-        // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression)
-        function compressImage(src, maxWidth, maxHeight, quality) {
+        // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression) ป้องกัน Request Too Large
+        function compressImage(src, maxWidth = 500, maxHeight = 500, quality = 0.65) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                img.crossOrigin = 'Anonymous';
+                if (!src.startsWith('data:')) {
+                    img.crossOrigin = 'Anonymous';
+                }
                 img.onload = function() {
                     let width = img.width;
                     let height = img.height;
@@ -284,6 +286,22 @@
                 img.onerror = (err) => reject(err);
                 img.src = src;
             });
+        }
+
+        async function processAndSetImage(rawBase64) {
+            try {
+                // บีบอัดให้อยู่ในขนาด ~30-60 KB ป้องกัน Vercel 413 Payload Too Large
+                const compressed = await compressImage(rawBase64, 500, 500, 0.65);
+                setImagePreview(compressed);
+            } catch (err) {
+                console.error("Compression error:", err);
+                try {
+                    const fallback = await compressImage(rawBase64, 300, 300, 0.5);
+                    setImagePreview(fallback);
+                } catch (e) {
+                    alert('ไม่สามารถย่อขนาดรูปภาพนี้ได้ กรุณาลองเลือกรูปภาพใหม่อีกครั้ง');
+                }
+            }
         }
 
         // 1. ดึงข้อมูลสินค้า
@@ -368,6 +386,11 @@
                 return;
             }
 
+            if (currentBase64Image.length > 2 * 1024 * 1024) {
+                alert('ขนาดรูปภาพใหญ่เกินกำหนด กรุณาเลือกไฟล์ภาพที่มีขนาดเล็กลง');
+                return;
+            }
+
             const body = {
                 name: document.getElementById('formName').value.trim(),
                 size: document.getElementById('formSize').value.trim(),
@@ -414,12 +437,7 @@
 
             const reader = new FileReader();
             reader.onload = async function(evt) {
-                try {
-                    const compressed = await compressImage(evt.target.result, 800, 800, 0.7);
-                    setImagePreview(compressed);
-                } catch (err) {
-                    setImagePreview(evt.target.result);
-                }
+                await processAndSetImage(evt.target.result);
             };
             reader.readAsDataURL(file);
         }
@@ -442,12 +460,7 @@
                         if (blob) {
                             const reader = new FileReader();
                             reader.onload = async function(evt) {
-                                try {
-                                    const compressed = await compressImage(evt.target.result, 800, 800, 0.7);
-                                    setImagePreview(compressed);
-                                } catch (err) {
-                                    setImagePreview(evt.target.result);
-                                }
+                                await processAndSetImage(evt.target.result);
                             };
                             reader.readAsDataURL(blob);
                             e.preventDefault();
