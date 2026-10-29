@@ -142,9 +142,16 @@ router.delete('/products/:id', async (req, res) => {
     }
 });
 
+const path = require('path');
+
 // Mount routes across all path variations
 app.use('/api', router);
 app.use('/.netlify/functions/api', router);
-app.use('/', router);
+
+// เสิร์ฟหน้าเว็บและ Static files
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 module.exports = { app, initDb };
