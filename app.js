@@ -5,6 +5,12 @@ const { db, initDb } = require('./db');
 const app = express();
 
 app.use(cors());
+app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -35,27 +41,29 @@ router.post('/products', async (req, res) => {
     const { sku, name, category, size, price, quantity, minStock, image } = req.body;
 
     try {
-        const result = await db.execute({
-            sql: `INSERT INTO products (sku, name, category, size, price, quantity, minStock, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            args: [
-                sku || '',
-                name || '',
-                category || '',
-                size || '',
-                parseFloat(price) || 0,
-                parseInt(quantity) || 0,
-                parseInt(minStock) || 0,
-                image || ''
-            ]
-        });
-
-        const newId = Number(result.lastInsertRowid);
         const now = new Date().toLocaleString('th-TH');
-        await db.execute({
-            sql: `INSERT INTO logs (date, productName, type, amount, note) VALUES (?, ?, ?, ?, ?)`,
-            args: [now, name, 'เพิ่มสินค้าใหม่', parseInt(quantity) || 0, `ขนาด: ${size || '-'}`]
-        });
+        // บันทึกสินค้าและประวัติพร้อมกันใน 1 Network Roundtrip ด้วย db.batch
+        const results = await db.batch([
+            {
+                sql: `INSERT INTO products (sku, name, category, size, price, quantity, minStock, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                args: [
+                    sku || '',
+                    name || '',
+                    category || '',
+                    size || '',
+                    parseFloat(price) || 0,
+                    parseInt(quantity) || 0,
+                    parseInt(minStock) || 0,
+                    image || ''
+                ]
+            },
+            {
+                sql: `INSERT INTO logs (date, productName, type, amount, note) VALUES (?, ?, ?, ?, ?)`,
+                args: [now, name, 'เพิ่มสินค้าใหม่', parseInt(quantity) || 0, `ขนาด: ${size || '-'}`]
+            }
+        ], "write");
 
+        const newId = Number(results[0].lastInsertRowid);
         res.json({ success: true, id: newId });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -68,24 +76,25 @@ router.put('/products/:id', async (req, res) => {
     const { name, category, size, quantity, minStock, image } = req.body;
 
     try {
-        await db.execute({
-            sql: `UPDATE products SET name = ?, category = ?, size = ?, quantity = ?, minStock = ?, image = ? WHERE id = ?`,
-            args: [
-                name || '',
-                category || '',
-                size || '',
-                parseInt(quantity) || 0,
-                parseInt(minStock) || 0,
-                image || '',
-                id
-            ]
-        });
-
         const now = new Date().toLocaleString('th-TH');
-        await db.execute({
-            sql: `INSERT INTO logs (date, productName, type, amount, note) VALUES (?, ?, ?, ?, ?)`,
-            args: [now, name, 'แก้ไขข้อมูล', parseInt(quantity) || 0, `แก้ไขขนาด/สต็อก (${size || '-'})`]
-        });
+        await db.batch([
+            {
+                sql: `UPDATE products SET name = ?, category = ?, size = ?, quantity = ?, minStock = ?, image = ? WHERE id = ?`,
+                args: [
+                    name || '',
+                    category || '',
+                    size || '',
+                    parseInt(quantity) || 0,
+                    parseInt(minStock) || 0,
+                    image || '',
+                    id
+                ]
+            },
+            {
+                sql: `INSERT INTO logs (date, productName, type, amount, note) VALUES (?, ?, ?, ?, ?)`,
+                args: [now, name, 'แก้ไขข้อมูล', parseInt(quantity) || 0, `แก้ไขขนาด/สต็อก (${size || '-'})`]
+            }
+        ], "write");
 
         res.json({ success: true, updated: 1 });
     } catch (err) {
@@ -100,8 +109,9 @@ router.patch('/products/:id/stock', async (req, res) => {
     const change = parseInt(changeAmount);
 
     try {
+        // ดึงเฉพาะชื่อและจำนวน ไม่ดึงรูปภาพ Base64 เพื่อความเร็วสูงสุด
         const pResult = await db.execute({
-            sql: 'SELECT * FROM products WHERE id = ?',
+            sql: 'SELECT name, quantity FROM products WHERE id = ?',
             args: [id]
         });
         const product = pResult.rows[0];
@@ -110,17 +120,20 @@ router.patch('/products/:id/stock', async (req, res) => {
         const newQty = Number(product.quantity) + change;
         if (newQty < 0) return res.status(400).json({ error: 'Stock cannot be negative' });
 
-        await db.execute({
-            sql: 'UPDATE products SET quantity = ? WHERE id = ?',
-            args: [newQty, id]
-        });
-
         const now = new Date().toLocaleString('th-TH');
         const typeStr = change > 0 ? 'รับเข้า' : 'เบิกออก';
-        await db.execute({
-            sql: `INSERT INTO logs (date, productName, type, amount, note) VALUES (?, ?, ?, ?, ?)`,
-            args: [now, product.name, typeStr, Math.abs(change), `ปรับสต๊อก ${change > 0 ? '+' : ''}${change}`]
-        });
+
+        // ส่ง UPDATE สินค้า และ INSERT logs พร้อมกันใน 1 Network Roundtrip
+        await db.batch([
+            {
+                sql: 'UPDATE products SET quantity = ? WHERE id = ?',
+                args: [newQty, id]
+            },
+            {
+                sql: `INSERT INTO logs (date, productName, type, amount, note) VALUES (?, ?, ?, ?, ?)`,
+                args: [now, product.name, typeStr, Math.abs(change), `ปรับสต๊อก ${change > 0 ? '+' : ''}${change}`]
+            }
+        ], "write");
 
         res.json({ success: true, quantity: newQty });
     } catch (err) {
