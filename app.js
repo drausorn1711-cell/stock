@@ -16,6 +16,24 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const router = express.Router();
 
+// 0. เช็กเวอร์ชันข้อมูลแบบความเร็วสูงพิเศษ (High-Speed Real-time Heartbeat ขนาดเพียง 23 bytes)
+router.get('/version', async (req, res) => {
+    try {
+        const result = await db.execute(`
+            SELECT 
+                (SELECT COUNT(*) FROM products) as count, 
+                (SELECT COALESCE(MAX(id), 0) FROM products) as max_id, 
+                (SELECT COALESCE(SUM(quantity), 0) FROM products) as total_qty, 
+                (SELECT COALESCE(MAX(id), 0) FROM logs) as log_id
+        `);
+        const row = result.rows[0];
+        const v = `${row.count}_${row.max_id}_${row.total_qty}_${row.log_id}`;
+        res.json({ v });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 1. ดึงรายการสินค้าทั้งหมด
 router.get('/products', async (req, res) => {
     try {

@@ -273,39 +273,94 @@
             } catch (e) {}
         }
 
+        let currentDataVersion = '';
+        let isCheckingVersion = false;
         let isSyncing = false;
         let autoSyncTimer = null;
+        let lastSyncTime = 0;
+
+        // ช่องสัญญาณส่งข้อมูลข้ามแท็บ/ข้ามหน้าต่างทันที 0ms (Broadcast Channel)
+        let syncChannel = null;
+        try {
+            syncChannel = new BroadcastChannel('stockmaster_sync');
+            syncChannel.onmessage = (msg) => {
+                if (msg.data && msg.data.type === 'REFRESH') {
+                    fetchProducts(true);
+                    fetchLogs(true);
+                }
+            };
+        } catch (e) {}
+
+        function broadcastLocalChange() {
+            if (syncChannel) {
+                try { syncChannel.postMessage({ type: 'REFRESH', time: Date.now() }); } catch (e) {}
+            }
+        }
 
         window.onload = function() {
             if (window.lucide) lucide.createIcons();
             loadFromCache(); // 1. ดึงจาก Cache ในเครื่องทันที (0ms)
             fetchProducts();  // 2. ดึงอัปเดตล่าสุดจาก Cloud ต่อเนื่อง
             fetchLogs();
-            startAutoSync(); // 3. เริ่มระบบ Real-Time Auto-Sync ซิงก์ทุกเครื่องอัตโนมัติ
+            startAutoSync(); // 3. เริ่มระบบ Real-Time Ultra-Fast Heartbeat (เช็กทุก 1 วินาที)
         };
 
-        // ระบบ Real-Time Auto-Sync (ดึงข้อมูลอัตโนมัติทุกๆ 3.5 วินาที ทุกเครื่องเห็นตรงกันตลอดเวลา)
-        function startAutoSync() {
-            if (autoSyncTimer) clearInterval(autoSyncTimer);
-            autoSyncTimer = setInterval(() => {
-                fetchProducts(true);
-                fetchLogs(true);
-            }, 3500);
+        // ระบบ Real-Time Ultra-Fast: เช็กสถานะการเปลี่ยนแปลงขนาดเพียง 23 bytes ทุกๆ 1 วินาที!
+        async function checkDataHeartbeat() {
+            if (isCheckingVersion) return;
+            isCheckingVersion = true;
+            try {
+                const res = await fetch('/api/version?t=' + Date.now());
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.v) {
+                        if (!currentDataVersion) {
+                            currentDataVersion = data.v;
+                        } else if (currentDataVersion !== data.v) {
+                            // มีการเปลี่ยนแปลงจากเครื่องอื่นเกิดขึ้นทันที!
+                            currentDataVersion = data.v;
+                            await fetchProducts(true);
+                            await fetchLogs(true);
+                        }
+                    }
+                }
+            } catch (e) {}
+            finally {
+                isCheckingVersion = false;
+            }
         }
 
-        // เมื่อสลับแท็บกลับมาดู หรือเปิดจอ ให้ดึงข้อมูลล่าสุดทันที
+        function startAutoSync() {
+            if (autoSyncTimer) clearInterval(autoSyncTimer);
+            // เช็กสถานะทุก 1 วินาที (1000ms) เด้งเร็วทันใจระดับวินาที
+            autoSyncTimer = setInterval(checkDataHeartbeat, 1000);
+        }
+
+        // เมื่อสลับแท็บกลับมาดู หรือเปิดจอ ให้เช็กทันที 0ms
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
-                fetchProducts(true);
-                fetchLogs(true);
+                checkDataHeartbeat();
                 startAutoSync();
+            } else {
+                if (autoSyncTimer) clearInterval(autoSyncTimer);
+                autoSyncTimer = setInterval(checkDataHeartbeat, 5000);
             }
         });
 
         window.addEventListener('focus', () => {
-            fetchProducts(true);
-            fetchLogs(true);
+            checkDataHeartbeat();
         });
+
+        // Smart Wakeup: เมื่อขยับเมาส์หรือสัมผัสหน้าจอ ถ้าเกิน 1.2 วินาทีให้ดึงทันที
+        function smartWakeup() {
+            const now = Date.now();
+            if (now - lastSyncTime > 1200) {
+                lastSyncTime = now;
+                checkDataHeartbeat();
+            }
+        }
+        window.addEventListener('mousemove', smartWakeup, { passive: true });
+        window.addEventListener('touchstart', smartWakeup, { passive: true });
 
         // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression) ให้มีขนาดเล็กและบันทึกเร็วที่สุด
         function compressImage(src, maxWidth = 400, maxHeight = 400, quality = 0.6) {
@@ -442,6 +497,7 @@
             saveToCache();
             updateProductRowQty(product);
             renderStats();
+            broadcastLocalChange();
 
             try {
                 const res = await fetch(`/api/products/${id}/stock`, {
@@ -472,6 +528,8 @@
             const removed = products.splice(index, 1)[0];
             saveToCache();
             renderDashboard();
+            broadcastLocalChange();
+            broadcastLocalChange();
 
             try {
                 const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
@@ -572,6 +630,7 @@
 
             saveToCache();
             renderDashboard();
+            broadcastLocalChange();
 
             // 2. ส่งข้อมูลไปบันทึกบนเซิร์ฟเวอร์ด้านหลังเงียบๆ
             try {
