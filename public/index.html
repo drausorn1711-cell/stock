@@ -25,7 +25,12 @@
                     <i data-lucide="box" class="w-6 h-6"></i>
                 </div>
                 <div>
-                    <h1 class="text-xl font-bold text-slate-900 tracking-tight">StockMaster</h1>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold text-slate-900 tracking-tight">StockMaster</h1>
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ซิงก์เรียลไทม์
+                        </span>
+                    </div>
                     <p class="text-xs text-slate-500">ระบบจัดการสินค้าและสต็อกสินค้าแบบเรียลไทม์</p>
                 </div>
             </div>
@@ -268,12 +273,39 @@
             } catch (e) {}
         }
 
+        let isSyncing = false;
+        let autoSyncTimer = null;
+
         window.onload = function() {
             if (window.lucide) lucide.createIcons();
             loadFromCache(); // 1. ดึงจาก Cache ในเครื่องทันที (0ms)
             fetchProducts();  // 2. ดึงอัปเดตล่าสุดจาก Cloud ต่อเนื่อง
             fetchLogs();
+            startAutoSync(); // 3. เริ่มระบบ Real-Time Auto-Sync ซิงก์ทุกเครื่องอัตโนมัติ
         };
+
+        // ระบบ Real-Time Auto-Sync (ดึงข้อมูลอัตโนมัติทุกๆ 3.5 วินาที ทุกเครื่องเห็นตรงกันตลอดเวลา)
+        function startAutoSync() {
+            if (autoSyncTimer) clearInterval(autoSyncTimer);
+            autoSyncTimer = setInterval(() => {
+                fetchProducts(true);
+                fetchLogs(true);
+            }, 3500);
+        }
+
+        // เมื่อสลับแท็บกลับมาดู หรือเปิดจอ ให้ดึงข้อมูลล่าสุดทันที
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                fetchProducts(true);
+                fetchLogs(true);
+                startAutoSync();
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            fetchProducts(true);
+            fetchLogs(true);
+        });
 
         // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression) ให้มีขนาดเล็กและบันทึกเร็วที่สุด
         function compressImage(src, maxWidth = 400, maxHeight = 400, quality = 0.6) {
@@ -329,35 +361,57 @@
             }
         }
 
-        // 1. ดึงข้อมูลสินค้าจากเซิร์ฟเวอร์
-        async function fetchProducts() {
+        // 1. ดึงข้อมูลสินค้าจากเซิร์ฟเวอร์ (รองรับทั้งตอนเปิดหน้า และ Auto-Sync เงียบๆ ด้านหลัง)
+        async function fetchProducts(isBackground = false) {
+            if (isSyncing) return;
+            isSyncing = true;
             try {
-                const res = await fetch('/api/products?t=' + new Date().getTime());
+                const res = await fetch('/api/products?t=' + Date.now());
                 if (!res.ok) {
-                    console.error("fetchProducts failed with status:", res.status);
-                    renderDashboard();
+                    if (!isBackground) renderDashboard();
                     return;
                 }
                 const data = await res.json();
-                products = Array.isArray(data) ? data : [];
-                saveToCache(); // เซฟแคชลงเครื่อง
-                renderDashboard();
+                const freshProducts = Array.isArray(data) ? data : [];
+
+                // ตรวจสอบว่าข้อมูลจากเซิร์ฟเวอร์เปลี่ยนไปหรือไม่ (เพื่อไม่ให้ตารางกระตุกถ้าไม่มีอะไรเปลี่ยน)
+                const hasChanged = JSON.stringify(freshProducts) !== JSON.stringify(products);
+                if (hasChanged) {
+                    products = freshProducts;
+                    saveToCache();
+
+                    // ถ้าผู้ใช้ไม่ได้กำลังเปิด Modal กรอกข้อมูลอยู่ ให้อัปเดตตารางทันที
+                    const modal = document.getElementById('productModal');
+                    const isModalOpen = modal && !modal.classList.contains('hidden');
+                    if (!isModalOpen) {
+                        renderDashboard();
+                    }
+                } else if (!isBackground) {
+                    renderDashboard();
+                }
             } catch (err) {
-                console.error("Error fetching products:", err);
-                renderDashboard();
+                if (!isBackground) {
+                    console.error("Error fetching products:", err);
+                    renderDashboard();
+                }
+            } finally {
+                isSyncing = false;
             }
         }
 
-        // 2. ดึงข้อมูลประวัติ
-        async function fetchLogs() {
+        // 2. ดึงข้อมูลประวัติ (Auto-Sync)
+        async function fetchLogs(isBackground = false) {
             try {
-                const res = await fetch('/api/logs?t=' + new Date().getTime());
+                const res = await fetch('/api/logs?t=' + Date.now());
                 if (!res.ok) return;
                 const data = await res.json();
-                logs = Array.isArray(data) ? data : [];
-                renderLogsTable();
+                const freshLogs = Array.isArray(data) ? data : [];
+                if (JSON.stringify(freshLogs) !== JSON.stringify(logs)) {
+                    logs = freshLogs;
+                    renderLogsTable();
+                }
             } catch (err) {
-                console.error("Error fetching logs:", err);
+                if (!isBackground) console.error("Error fetching logs:", err);
             }
         }
 
