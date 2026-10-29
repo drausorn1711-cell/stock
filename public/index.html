@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>StockMaster - ระบบคลังสินค้า</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Libraries for Export (Excel & PDF) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 font-sans antialiased">
 
@@ -95,7 +98,7 @@
                 <div class="flex flex-col md:flex-row gap-3 items-center justify-between">
                     <div class="relative w-full md:w-96">
                         <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
-                        <input type="text" id="searchInput" oninput="renderTable()" placeholder="ค้นหาตามชื่อสินค้า หรือ SKU/ขนาด..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="text" id="searchInput" oninput="onSearchInput()" placeholder="ค้นหาตามชื่อสินค้า หรือ SKU/ขนาด..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div class="flex gap-2 w-full md:w-auto">
                         <select id="categoryFilter" onchange="renderTable()" class="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -243,15 +246,37 @@
         let logs = [];
         let currentBase64Image = '';
         let editingProductId = null; // เก็บ ID เมื่ออยู่ในโหมดแก้ไข
+        let searchDebounceTimer = null;
+
+        // ฟังก์ชันระบบแคชความเร็วสูง (เปิดหน้าปุ๊บ ข้อมูลมาทันที 0 วินาที)
+        function saveToCache() {
+            try {
+                localStorage.setItem('stockmaster_cache_products', JSON.stringify(products));
+            } catch (e) {}
+        }
+
+        function loadFromCache() {
+            try {
+                const cached = localStorage.getItem('stockmaster_cache_products');
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        products = parsed;
+                        renderDashboard();
+                    }
+                }
+            } catch (e) {}
+        }
 
         window.onload = function() {
             if (window.lucide) lucide.createIcons();
-            fetchProducts();
+            loadFromCache(); // 1. ดึงจาก Cache ในเครื่องทันที (0ms)
+            fetchProducts();  // 2. ดึงอัปเดตล่าสุดจาก Cloud ต่อเนื่อง
             fetchLogs();
         };
 
-        // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression) ป้องกัน Request Too Large
-        function compressImage(src, maxWidth = 500, maxHeight = 500, quality = 0.65) {
+        // ฟังก์ชันช่วยบีบอัดรูปภาพก่อนนำไปใช้งาน (Image Compression) ให้มีขนาดเล็กและบันทึกเร็วที่สุด
+        function compressImage(src, maxWidth = 400, maxHeight = 400, quality = 0.6) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 if (!src.startsWith('data:')) {
@@ -290,13 +315,13 @@
 
         async function processAndSetImage(rawBase64) {
             try {
-                // บีบอัดให้อยู่ในขนาด ~30-60 KB ป้องกัน Vercel 413 Payload Too Large
-                const compressed = await compressImage(rawBase64, 500, 500, 0.65);
+                // บีบอัดให้อยู่ในขนาด ~15-30 KB ช่วยให้กดบันทึกแล้วเร็วขึ้นทันที
+                const compressed = await compressImage(rawBase64, 400, 400, 0.6);
                 setImagePreview(compressed);
             } catch (err) {
                 console.error("Compression error:", err);
                 try {
-                    const fallback = await compressImage(rawBase64, 300, 300, 0.5);
+                    const fallback = await compressImage(rawBase64, 250, 250, 0.5);
                     setImagePreview(fallback);
                 } catch (e) {
                     alert('ไม่สามารถย่อขนาดรูปภาพนี้ได้ กรุณาลองเลือกรูปภาพใหม่อีกครั้ง');
@@ -304,7 +329,7 @@
             }
         }
 
-        // 1. ดึงข้อมูลสินค้า
+        // 1. ดึงข้อมูลสินค้าจากเซิร์ฟเวอร์
         async function fetchProducts() {
             try {
                 const res = await fetch('/api/products?t=' + new Date().getTime());
@@ -315,6 +340,7 @@
                 }
                 const data = await res.json();
                 products = Array.isArray(data) ? data : [];
+                saveToCache(); // เซฟแคชลงเครื่อง
                 renderDashboard();
             } catch (err) {
                 console.error("Error fetching products:", err);
@@ -335,7 +361,17 @@
             }
         }
 
-        // 3. ปรับสต๊อก (+1 / -1)
+        // อัปเดตเฉพาะตัวเลขและสีของแถวสินค้าทันที (Optimistic UI - ไม่กระตุกทั้งตาราง)
+        function updateProductRowQty(p) {
+            const badge = document.getElementById('qty-badge-' + p.id);
+            if (!badge) return;
+            const qty = Number(p.quantity) || 0;
+            const min = Number(p.minStock) || 0;
+            badge.innerText = qty;
+            badge.className = `px-2.5 py-0.5 text-xs rounded-full font-bold transition-colors ${qty <= min ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`;
+        }
+
+        // 3. ปรับสต๊อก (+1 / -1) ตอบสนองทันที 0ms
         async function adjustStock(id, changeAmount) {
             const product = products.find(p => p.id === Number(id));
             if (!product) return;
@@ -347,7 +383,11 @@
 
             const oldQty = product.quantity;
             product.quantity = Number(product.quantity) + changeAmount;
-            renderDashboard();
+            
+            // อัปเดตทันทีบนหน้าจอและแคช (ไม่ต้องโหลดตารางใหม่)
+            saveToCache();
+            updateProductRowQty(product);
+            renderStats();
 
             try {
                 const res = await fetch(`/api/products/${id}/stock`, {
@@ -357,32 +397,62 @@
                 });
 
                 if (!res.ok) throw new Error('Failed to update');
-                fetchLogs();
+                fetchLogs(); // อัปเดตประวัติด้านหลังเงียบๆ
             } catch (err) {
                 console.error(err);
+                // ถ้าเน็ตหลุด ให้ย้อนค่าเดิมกลับมา
                 product.quantity = oldQty;
-                renderDashboard();
-                alert('ไม่สามารถปรับปรุงสต็อกไปยังเซิร์ฟเวอร์ได้');
+                saveToCache();
+                updateProductRowQty(product);
+                renderStats();
+                alert('ไม่สามารถปรับปรุงสต็อกไปยังเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง');
             }
         }
 
-        // 4. ลบสินค้า
+        // 4. ลบสินค้า (ลบออกจากจอก่อนทันที ถ้าสำเร็จบันทึก)
         async function deleteProduct(id) {
             if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสินค้ารายการนี้?')) return;
+            const index = products.findIndex(p => p.id === Number(id));
+            if (index === -1) return;
+
+            const removed = products.splice(index, 1)[0];
+            saveToCache();
+            renderDashboard();
+
             try {
                 const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
                 if (res.ok) {
-                    fetchProducts();
                     fetchLogs();
                 } else {
+                    products.splice(index, 0, removed);
+                    saveToCache();
+                    renderDashboard();
                     alert('เกิดข้อผิดพลาดในการลบสินค้า');
                 }
             } catch (err) {
+                products.splice(index, 0, removed);
+                saveToCache();
+                renderDashboard();
                 alert('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
             }
         }
 
-        // 5. บันทึกข้อมูล (รองรับทั้งเพิ่มใหม่และแก้ไข)
+        // แจ้งเตือนข้อความลอย (Floating Toast Notification)
+        function showToast(message, isError = false) {
+            let toast = document.getElementById('toastNotification');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toastNotification';
+                document.body.appendChild(toast);
+            }
+            toast.className = `fixed top-5 right-5 z-50 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-white text-sm font-semibold transition-all duration-300 transform translate-y-0 opacity-100 ${isError ? 'bg-rose-600 shadow-rose-200' : 'bg-emerald-600 shadow-emerald-200'}`;
+            toast.innerHTML = isError ? `<span>⚠️ ${message}</span>` : `<span>✓ ${message}</span>`;
+            setTimeout(() => {
+                if (toast) toast.className = toast.className.replace('translate-y-0 opacity-100', 'translate-y-[-50px] opacity-0');
+            }, 2500);
+        }
+
+        // 5. บันทึกข้อมูล (รองรับทั้งเพิ่มใหม่และแก้ไข ตอบสนองทันที 0ms)
         async function handleFormSubmit(e) {
             e.preventDefault();
 
@@ -396,12 +466,6 @@
                 return;
             }
 
-            const submitBtn = e.target.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.innerText = 'กำลังบันทึก...';
-            }
-
             const body = {
                 name: document.getElementById('formName').value.trim(),
                 size: document.getElementById('formSize').value.trim(),
@@ -412,9 +476,53 @@
                 image: currentBase64Image
             };
 
+            const isEdit = !!editingProductId;
+            const targetEditId = editingProductId;
+
+            // 1. ปิดหน้าต่างและแสดงผลในตารางทันที (0 วินาที ไม่ต้องรอเซิร์ฟเวอร์)
+            closeModal();
+            showToast(isEdit ? 'แก้ไขข้อมูลเรียบร้อยแล้ว' : 'เพิ่มสินค้าใหม่เรียบร้อยแล้ว');
+
+            let tempId = null;
+            let originalProductBackup = null;
+
+            if (isEdit) {
+                const prodIndex = products.findIndex(p => p.id === Number(targetEditId));
+                if (prodIndex !== -1) {
+                    originalProductBackup = { ...products[prodIndex] };
+                    products[prodIndex] = {
+                        ...products[prodIndex],
+                        name: body.name,
+                        size: body.size,
+                        category: body.category,
+                        quantity: body.quantity,
+                        minStock: body.minStock,
+                        image: body.image
+                    };
+                }
+            } else {
+                tempId = 'temp_' + Date.now();
+                const optimisticProduct = {
+                    id: tempId,
+                    sku: body.size,
+                    name: body.name,
+                    size: body.size,
+                    category: body.category,
+                    price: 0,
+                    quantity: body.quantity,
+                    minStock: body.minStock,
+                    image: body.image
+                };
+                products.unshift(optimisticProduct);
+            }
+
+            saveToCache();
+            renderDashboard();
+
+            // 2. ส่งข้อมูลไปบันทึกบนเซิร์ฟเวอร์ด้านหลังเงียบๆ
             try {
-                const url = editingProductId ? `/api/products/${editingProductId}` : '/api/products';
-                const method = editingProductId ? 'PUT' : 'POST';
+                const url = isEdit ? `/api/products/${targetEditId}` : '/api/products';
+                const method = isEdit ? 'PUT' : 'POST';
 
                 const res = await fetch(url, {
                     method: method,
@@ -423,26 +531,30 @@
                 });
 
                 if (res.ok) {
-                    closeModal();
-                    fetchProducts();
-                    fetchLogs();
+                    const data = await res.json();
+                    if (!isEdit && data.id) {
+                        const addedItem = products.find(p => p.id === tempId);
+                        if (addedItem) addedItem.id = data.id;
+                        saveToCache();
+                    }
+                    fetchLogs(); // อัปเดตประวัติเงียบๆ
                 } else {
                     const text = await res.text();
-                    try {
-                        const errData = JSON.parse(text);
-                        alert('เกิดข้อผิดพลาด: ' + (errData.error || 'บันทึกไม่สำเร็จ'));
-                    } catch {
-                        alert(`เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ (รหัส ${res.status}): ${text}`);
-                    }
+                    throw new Error(text);
                 }
             } catch (err) {
                 console.error("Submit error:", err);
-                alert('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้: ' + err.message);
-            } finally {
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = 'บันทึกข้อมูล';
+                // หากเซิร์ฟเวอร์ล้มเหลว คืนค่าเดิมและแจ้งเตือน
+                if (isEdit && originalProductBackup) {
+                    const prodIndex = products.findIndex(p => p.id === Number(targetEditId));
+                    if (prodIndex !== -1) products[prodIndex] = originalProductBackup;
+                } else if (tempId) {
+                    const idx = products.findIndex(p => p.id === tempId);
+                    if (idx !== -1) products.splice(idx, 1);
                 }
+                saveToCache();
+                renderDashboard();
+                alert('ไม่สามารถบันทึกลงเซิร์ฟเวอร์ได้: ' + err.message);
             }
         }
 
@@ -499,6 +611,11 @@
         }
 
         // 8. แสดงผลตารางสินค้า
+        function onSearchInput() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(renderTable, 80);
+        }
+
         function renderTable() {
             const tbody = document.getElementById('productTableBody');
             const search = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -534,14 +651,14 @@
                 <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-4 py-3 text-center">
                         <div class="w-10 h-10 border border-slate-200 rounded-lg bg-slate-50 mx-auto overflow-hidden flex items-center justify-center">
-                            ${p.image ? `<img src="${p.image}" class="w-full h-full object-cover">` : `<i data-lucide="image" class="w-4 h-4 text-slate-300"></i>`}
+                            ${p.image ? `<img src="${p.image}" class="w-full h-full object-cover">` : `<svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`}
                         </div>
                     </td>
                     <td class="px-4 py-3 text-xs font-mono text-slate-600 font-medium">${p.size || p.sku || '-'}</td>
                     <td class="px-4 py-3 font-semibold text-slate-900">${p.name || '-'}</td>
                     <td class="px-4 py-3"><span class="px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded font-medium">${p.category || '-'}</span></td>
                     <td class="px-4 py-3 text-center">
-                        <span class="px-2.5 py-0.5 text-xs rounded-full font-bold ${qty <= min ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${qty}</span>
+                        <span id="qty-badge-${p.id}" class="px-2.5 py-0.5 text-xs rounded-full font-bold transition-colors ${qty <= min ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${qty}</span>
                     </td>
                     <td class="px-4 py-3 text-center">
                         <div class="flex items-center justify-center gap-1.5">
@@ -556,18 +673,16 @@
                     <td class="px-4 py-3 text-center">
                         <div class="flex items-center justify-center gap-1.5">
                             <button type="button" onclick="editProduct(${p.id})" title="แก้ไขสินค้า" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition">
-                                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                             </button>
                             <button type="button" onclick="deleteProduct(${p.id})" title="ลบสินค้า" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             </button>
                         </div>
                     </td>
                 </tr>
                 `;
             }).join('');
-
-            if (window.lucide) lucide.createIcons();
         }
 
         // 9. แสดงผลตาราง Logs
