@@ -537,19 +537,6 @@
                 if (!isBackground) console.error("Error fetching logs:", err);
             }
         }
-            try {
-                const res = await fetch('/api/logs?t=' + Date.now());
-                if (!res.ok) return;
-                const data = await res.json();
-                const freshLogs = Array.isArray(data) ? data : [];
-                if (JSON.stringify(freshLogs) !== JSON.stringify(logs)) {
-                    logs = freshLogs;
-                    renderLogsTable();
-                }
-            } catch (err) {
-                if (!isBackground) console.error("Error fetching logs:", err);
-            }
-        }
 
         // อัปเดตเฉพาะตัวเลขและสีของแถวสินค้าทันที (Optimistic UI - ไม่กระตุกทั้งตาราง)
         function updateProductRowQty(p) {
