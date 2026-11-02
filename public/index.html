@@ -19,9 +19,9 @@
 
     <!-- Navbar / Header -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3 sm:gap-4">
+                <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm shrink-0">
                     <i data-lucide="box" class="w-6 h-6"></i>
                 </div>
                 <div>
@@ -31,7 +31,19 @@
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ซิงก์เรียลไทม์
                         </span>
                     </div>
-                    <p class="text-xs text-slate-500">ระบบจัดการสินค้าและสต็อกสินค้าแบบเรียลไทม์</p>
+                    <p class="text-xs text-slate-500">
+                        ระบบจัดการสต็อก <span id="teamHeaderSubtitle" class="font-semibold text-blue-600">(ทีม 1)</span>
+                    </p>
+                </div>
+
+                <!-- ปุ่มสลับทีม (Team Switcher) -->
+                <div class="ml-1 sm:ml-3 inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 shadow-inner">
+                    <button id="tabTeam1" onclick="switchTeam('team1')" type="button" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-blue-600 text-white shadow-sm cursor-pointer">
+                        <i data-lucide="users" class="w-3.5 h-3.5"></i> ทีม 1
+                    </button>
+                    <button id="tabTeam2" onclick="switchTeam('team2')" type="button" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 cursor-pointer">
+                        <i data-lucide="users" class="w-3.5 h-3.5"></i> ทีม 2
+                    </button>
                 </div>
             </div>
             
@@ -253,23 +265,78 @@
         let editingProductId = null; // เก็บ ID เมื่ออยู่ในโหมดแก้ไข
         let searchDebounceTimer = null;
 
-        // ฟังก์ชันระบบแคชความเร็วสูง (เปิดหน้าปุ๊บ ข้อมูลมาทันที 0 วินาที)
+        // ระบบจัดการทีม (Team Management)
+        let currentTeam = new URLSearchParams(window.location.search).get('team') || localStorage.getItem('stockmaster_current_team') || 'team1';
+        if (currentTeam !== 'team1' && currentTeam !== 'team2') currentTeam = 'team1';
+
+        function getTeamDisplayName() {
+            return currentTeam === 'team2' ? 'ทีม 2' : 'ทีม 1';
+        }
+
+        function updateTeamButtonsUI() {
+            const btn1 = document.getElementById('tabTeam1');
+            const btn2 = document.getElementById('tabTeam2');
+            const subtitle = document.getElementById('teamHeaderSubtitle');
+            if (subtitle) subtitle.innerText = `(${getTeamDisplayName()})`;
+
+            if (currentTeam === 'team2') {
+                if (btn1) btn1.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 cursor-pointer";
+                if (btn2) btn2.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-blue-600 text-white shadow-sm cursor-pointer";
+            } else {
+                if (btn1) btn1.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-blue-600 text-white shadow-sm cursor-pointer";
+                if (btn2) btn2.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 cursor-pointer";
+            }
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function switchTeam(teamName) {
+            if (currentTeam === teamName) return;
+            currentTeam = teamName;
+            localStorage.setItem('stockmaster_current_team', currentTeam);
+
+            // อัปเดต URL query parameter ให้บันทึกและแชร์ลิงก์ทีมได้
+            const url = new URL(window.location);
+            if (currentTeam === 'team1') {
+                url.searchParams.delete('team');
+            } else {
+                url.searchParams.set('team', currentTeam);
+            }
+            window.history.pushState({}, '', url);
+
+            updateTeamButtonsUI();
+            currentDataVersion = '';
+            products = [];
+            logs = [];
+            loadFromCache();
+            fetchProducts();
+            fetchLogs();
+            showToast(`สลับไป ${getTeamDisplayName()} เรียบร้อยแล้ว`);
+        }
+
+        // ฟังก์ชันระบบแคชความเร็วสูง แยกตามทีม (เปิดหน้าปุ๊บ ข้อมูลมาทันที 0 วินาที)
         function saveToCache() {
             try {
-                localStorage.setItem('stockmaster_cache_products', JSON.stringify(products));
+                localStorage.setItem('stockmaster_cache_products_' + currentTeam, JSON.stringify(products));
             } catch (e) {}
         }
 
         function loadFromCache() {
             try {
-                const cached = localStorage.getItem('stockmaster_cache_products');
+                let cached = localStorage.getItem('stockmaster_cache_products_' + currentTeam);
+                // รองรับข้อมูลเดิมที่มีอยู่ของทีม 1
+                if (cached === null && currentTeam === 'team1') {
+                    cached = localStorage.getItem('stockmaster_cache_products');
+                }
                 if (cached !== null) {
                     const parsed = JSON.parse(cached);
                     if (Array.isArray(parsed)) {
                         products = parsed;
                         renderDashboard();
+                        return;
                     }
                 }
+                products = [];
+                renderDashboard();
             } catch (e) {}
         }
 
@@ -284,7 +351,7 @@
         try {
             syncChannel = new BroadcastChannel('stockmaster_sync');
             syncChannel.onmessage = (msg) => {
-                if (msg.data && msg.data.type === 'REFRESH') {
+                if (msg.data && msg.data.type === 'REFRESH' && (!msg.data.team || msg.data.team === currentTeam)) {
                     fetchProducts(true);
                     fetchLogs(true);
                 }
@@ -293,11 +360,12 @@
 
         function broadcastLocalChange() {
             if (syncChannel) {
-                try { syncChannel.postMessage({ type: 'REFRESH', time: Date.now() }); } catch (e) {}
+                try { syncChannel.postMessage({ type: 'REFRESH', team: currentTeam, time: Date.now() }); } catch (e) {}
             }
         }
 
         window.onload = function() {
+            updateTeamButtonsUI();
             if (window.lucide) lucide.createIcons();
             loadFromCache(); // 1. ดึงจาก Cache ในเครื่องทันที (0ms)
             fetchProducts();  // 2. ดึงอัปเดตล่าสุดจาก Cloud ต่อเนื่อง
@@ -305,12 +373,12 @@
             startAutoSync(); // 3. เริ่มระบบ Real-Time Ultra-Fast Heartbeat (เช็กทุก 1 วินาที)
         };
 
-        // ระบบ Real-Time Ultra-Fast: เช็กสถานะการเปลี่ยนแปลงขนาดเพียง 23 bytes ทุกๆ 1 วินาที!
+        // ระบบ Real-Time Ultra-Fast: เช็กสถานะการเปลี่ยนแปลงขนาดเพียง 23 bytes ทุกๆ 1 วินาที แยกตามทีม!
         async function checkDataHeartbeat() {
             if (isCheckingVersion) return;
             isCheckingVersion = true;
             try {
-                const res = await fetch('/api/version?t=' + Date.now());
+                const res = await fetch(`/api/version?team=${currentTeam}&t=` + Date.now());
                 if (res.ok) {
                     const data = await res.json();
                     if (data && data.v) {
@@ -416,12 +484,12 @@
             }
         }
 
-        // 1. ดึงข้อมูลสินค้าจากเซิร์ฟเวอร์ (รองรับทั้งตอนเปิดหน้า และ Auto-Sync เงียบๆ ด้านหลัง)
+        // 1. ดึงข้อมูลสินค้าจากเซิร์ฟเวอร์ (แยกตามทีม)
         async function fetchProducts(isBackground = false) {
             if (isSyncing) return;
             isSyncing = true;
             try {
-                const res = await fetch('/api/products?t=' + Date.now());
+                const res = await fetch(`/api/products?team=${currentTeam}&t=` + Date.now());
                 if (!res.ok) {
                     if (!isBackground) renderDashboard();
                     return;
@@ -454,8 +522,21 @@
             }
         }
 
-        // 2. ดึงข้อมูลประวัติ (Auto-Sync)
+        // 2. ดึงข้อมูลประวัติ (แยกตามทีม)
         async function fetchLogs(isBackground = false) {
+            try {
+                const res = await fetch(`/api/logs?team=${currentTeam}&t=` + Date.now());
+                if (!res.ok) return;
+                const data = await res.json();
+                const freshLogs = Array.isArray(data) ? data : [];
+                if (JSON.stringify(freshLogs) !== JSON.stringify(logs)) {
+                    logs = freshLogs;
+                    renderLogsTable();
+                }
+            } catch (err) {
+                if (!isBackground) console.error("Error fetching logs:", err);
+            }
+        }
             try {
                 const res = await fetch('/api/logs?t=' + Date.now());
                 if (!res.ok) return;
@@ -585,7 +666,8 @@
                 price: 0,
                 quantity: parseInt(document.getElementById('formQuantity').value) || 0,
                 minStock: parseInt(document.getElementById('formMinStock').value) || 0,
-                image: currentBase64Image
+                image: currentBase64Image,
+                team: currentTeam
             };
 
             const isEdit = !!editingProductId;
@@ -593,7 +675,7 @@
 
             // 1. ปิดหน้าต่างและแสดงผลในตารางทันที (0 วินาที ไม่ต้องรอเซิร์ฟเวอร์)
             closeModal();
-            showToast(isEdit ? 'แก้ไขข้อมูลเรียบร้อยแล้ว' : 'เพิ่มสินค้าใหม่เรียบร้อยแล้ว');
+            showToast(isEdit ? `แก้ไขข้อมูล (${getTeamDisplayName()}) เรียบร้อยแล้ว` : `เพิ่มสินค้าใหม่ (${getTeamDisplayName()}) เรียบร้อยแล้ว`);
 
             let tempId = null;
             let originalProductBackup = null;
@@ -609,7 +691,8 @@
                         category: body.category,
                         quantity: body.quantity,
                         minStock: body.minStock,
-                        image: body.image
+                        image: body.image,
+                        team: currentTeam
                     };
                 }
             } else {
@@ -623,7 +706,8 @@
                     price: 0,
                     quantity: body.quantity,
                     minStock: body.minStock,
-                    image: body.image
+                    image: body.image,
+                    team: currentTeam
                 };
                 products.unshift(optimisticProduct);
             }
@@ -847,7 +931,7 @@
         // เปิด Modal เพิ่มสินค้าใหม่
         function openModal() {
             editingProductId = null;
-            document.getElementById('modalTitle').innerText = 'เพิ่มสินค้าใหม่';
+            document.getElementById('modalTitle').innerText = 'เพิ่มสินค้าใหม่ (' + getTeamDisplayName() + ')';
             document.getElementById('productForm').reset();
             currentBase64Image = '';
             document.getElementById('imagePreviewBox').innerHTML = `<i data-lucide="image" class="w-6 h-6 text-slate-300"></i>`;
@@ -861,7 +945,7 @@
             if (!p) return;
 
             editingProductId = p.id;
-            document.getElementById('modalTitle').innerText = 'แก้ไขข้อมูลสินค้า';
+            document.getElementById('modalTitle').innerText = 'แก้ไขข้อมูลสินค้า (' + getTeamDisplayName() + ')';
             document.getElementById('formName').value = p.name || '';
             document.getElementById('formSize').value = p.size || p.sku || '';
             document.getElementById('formCategory').value = p.category || '';
@@ -896,7 +980,7 @@
             const ws = XLSX.utils.json_to_sheet(excelData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "StockData");
-            XLSX.writeFile(wb, "รายงานสต็อกสินค้า.xlsx");
+            XLSX.writeFile(wb, "รายงานสต็อกสินค้า_" + getTeamDisplayName() + ".xlsx");
         }
 
         // ส่งออก PDF รายการสินค้า (สวยงาม คมชัด ไม่ติดปัญหาหน้าขาว)
@@ -915,7 +999,7 @@
 
             printContainer.innerHTML = `
                 <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 12px;">
-                    <h2 style="font-size: 20px; font-weight: bold; margin: 0; color: #0f172a;">รายงานรายการสินค้าในคลัง (Inventory Report)</h2>
+                    <h2 style="font-size: 20px; font-weight: bold; margin: 0; color: #0f172a;">รายงานรายการสินค้าในคลัง - ${getTeamDisplayName()} (Inventory Report)</h2>
                     <p style="font-size: 12px; color: #64748b; margin: 5px 0 0 0;">พิมพ์เมื่อ: ${now} | ทั้งหมด ${products.length} รายการ | ระบบ StockMaster</p>
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
@@ -952,7 +1036,7 @@
 
             const opt = {
                 margin: 0.4,
-                filename: 'รายงานสินค้า_' + Date.now() + '.pdf',
+                filename: 'รายงานสินค้า_' + getTeamDisplayName() + '_' + Date.now() + '.pdf',
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
@@ -977,7 +1061,7 @@
 
             printContainer.innerHTML = `
                 <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 12px;">
-                    <h2 style="font-size: 20px; font-weight: bold; margin: 0; color: #0f172a;">รายงานประวัติความเคลื่อนไหวสต็อกสินค้า (Stock Logs)</h2>
+                    <h2 style="font-size: 20px; font-weight: bold; margin: 0; color: #0f172a;">รายงานประวัติความเคลื่อนไหวสต็อกสินค้า - ${getTeamDisplayName()} (Stock Logs)</h2>
                     <p style="font-size: 12px; color: #64748b; margin: 5px 0 0 0;">พิมพ์เมื่อ: ${now} | ทั้งหมด ${logs.length} รายการ | ระบบ StockMaster</p>
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
@@ -1006,7 +1090,7 @@
 
             const opt = {
                 margin: 0.4,
-                filename: 'รายงานประวัติสต็อก_' + Date.now() + '.pdf',
+                filename: 'รายงานประวัติสต็อก_' + getTeamDisplayName() + '_' + Date.now() + '.pdf',
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }

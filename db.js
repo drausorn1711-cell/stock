@@ -38,6 +38,18 @@ async function initDb() {
         // column already exists
     }
 
+    try {
+        await db.execute("ALTER TABLE products ADD COLUMN team TEXT DEFAULT 'team1'");
+    } catch (e) {
+        // column already exists
+    }
+
+    try {
+        await db.execute("ALTER TABLE logs ADD COLUMN team TEXT DEFAULT 'team1'");
+    } catch (e) {
+        // column already exists
+    }
+
     await db.execute(`
         CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
