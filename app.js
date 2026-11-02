@@ -43,7 +43,7 @@ router.get('/products', async (req, res) => {
     const team = req.query.team || 'team1';
     try {
         const result = await db.execute({
-            sql: 'SELECT * FROM products WHERE COALESCE(team, "team1") = ? ORDER BY id DESC',
+            sql: "SELECT * FROM products WHERE COALESCE(team, 'team1') = ? ORDER BY id DESC",
             args: [team]
         });
         res.json(result.rows);
@@ -57,7 +57,7 @@ router.get('/logs', async (req, res) => {
     const team = req.query.team || 'team1';
     try {
         const result = await db.execute({
-            sql: 'SELECT * FROM logs WHERE COALESCE(team, "team1") = ? ORDER BY id DESC LIMIT 50',
+            sql: "SELECT * FROM logs WHERE COALESCE(team, 'team1') = ? ORDER BY id DESC LIMIT 50",
             args: [team]
         });
         res.json(result.rows);
