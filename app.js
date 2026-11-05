@@ -38,15 +38,27 @@ router.get('/version', async (req, res) => {
     }
 });
 
-// 1. ดึงรายการสินค้าทั้งหมด (แยกตามทีม)
+// 1. ดึงรายการสินค้าทั้งหมด (แยกตามทีม เรียงลำดับตามพยัญชนะ ก-ฮ)
 router.get('/products', async (req, res) => {
     const team = req.query.team || 'team1';
     try {
         const result = await db.execute({
-            sql: "SELECT * FROM products WHERE COALESCE(team, 'team1') = ? ORDER BY id DESC",
+            sql: "SELECT * FROM products WHERE COALESCE(team, 'team1') = ?",
             args: [team]
         });
-        res.json(result.rows);
+        const rows = result.rows || [];
+        rows.sort((a, b) => {
+            const nameA = (a && a.name) ? String(a.name).trim() : '';
+            const nameB = (b && b.name) ? String(b.name).trim() : '';
+            if (!nameA && nameB) return 1;
+            if (nameA && !nameB) return -1;
+            const comp = nameA.localeCompare(nameB, 'th');
+            if (comp !== 0) return comp;
+            const sizeA = (a && (a.size || a.sku)) ? String(a.size || a.sku).trim() : '';
+            const sizeB = (b && (b.size || b.sku)) ? String(b.size || b.sku).trim() : '';
+            return sizeA.localeCompare(sizeB, 'th', { numeric: true });
+        });
+        res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -32,7 +32,7 @@
                         </span>
                     </div>
                     <p class="text-xs text-slate-500">
-                        ระบบจัดการสต็อก <span id="teamHeaderSubtitle" class="font-semibold text-blue-600">(ทีม 1)</span>
+                        ระบบจัดการสต็อก <span id="teamHeaderSubtitle" class="font-semibold text-blue-600">(ทีมน้ำพริก)</span>
                     </p>
                 </div>
 
@@ -270,7 +270,23 @@
         if (currentTeam !== 'team1' && currentTeam !== 'team2') currentTeam = 'team1';
 
         function getTeamDisplayName() {
-            return currentTeam === 'team2' ? 'ทีม 2' : 'ทีม 1';
+            return currentTeam === 'team2' ? 'ทีมมหาเทพ' : 'ทีมน้ำพริก';
+        }
+
+        // ฟังก์ชันเรียงลำดับสินค้าตามพยัญชนะไทย (ก-ฮ) และตามขนาด/SKU ข้อมูลเดิมอยู่ครบ 100%
+        function sortProductsThai(list) {
+            if (!Array.isArray(list)) return [];
+            return list.sort((a, b) => {
+                const nameA = (a && a.name) ? String(a.name).trim() : '';
+                const nameB = (b && b.name) ? String(b.name).trim() : '';
+                if (!nameA && nameB) return 1;
+                if (nameA && !nameB) return -1;
+                const comp = nameA.localeCompare(nameB, 'th');
+                if (comp !== 0) return comp;
+                const sizeA = (a && (a.size || a.sku)) ? String(a.size || a.sku).trim() : '';
+                const sizeB = (b && (b.size || b.sku)) ? String(b.size || b.sku).trim() : '';
+                return sizeA.localeCompare(sizeB, 'th', { numeric: true });
+            });
         }
 
         function updateTeamButtonsUI() {
@@ -330,7 +346,7 @@
                 if (cached !== null) {
                     const parsed = JSON.parse(cached);
                     if (Array.isArray(parsed)) {
-                        products = parsed;
+                        products = sortProductsThai(parsed);
                         renderDashboard();
                         return;
                     }
@@ -495,7 +511,7 @@
                     return;
                 }
                 const data = await res.json();
-                const freshProducts = Array.isArray(data) ? data : [];
+                const freshProducts = sortProductsThai(Array.isArray(data) ? data : []);
 
                 // ตรวจสอบว่าข้อมูลจากเซิร์ฟเวอร์เปลี่ยนไปหรือไม่ (เพื่อไม่ให้ตารางกระตุกถ้าไม่มีอะไรเปลี่ยน)
                 const hasChanged = JSON.stringify(freshProducts) !== JSON.stringify(products);
@@ -696,9 +712,10 @@
                     image: body.image,
                     team: currentTeam
                 };
-                products.unshift(optimisticProduct);
+                products.push(optimisticProduct);
             }
 
+            sortProductsThai(products);
             saveToCache();
             renderDashboard();
             broadcastLocalChange();
@@ -821,6 +838,8 @@
 
                 return matchSearch && matchCat && matchStock;
             });
+
+            sortProductsThai(filtered);
 
             if (filtered.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400">ไม่พบข้อมูลสินค้าตรงตามเงื่อนไข</td></tr>`;
@@ -957,6 +976,7 @@
         // ส่งออก Excel
         function exportToExcel() {
             if (products.length === 0) return alert('ไม่มีข้อมูลสำหรับส่งออก');
+            sortProductsThai(products);
             const excelData = products.map(p => ({
                 'SKU / ขนาด': p.size || p.sku || '-',
                 'ชื่อสินค้า': p.name || '-',
@@ -976,6 +996,7 @@
                 alert('ยังไม่มีข้อมูลสินค้าสำหรับส่งออก');
                 return;
             }
+            sortProductsThai(products);
 
             const now = new Date().toLocaleString('th-TH');
             const printContainer = document.createElement('div');
