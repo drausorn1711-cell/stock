@@ -811,10 +811,21 @@
             document.getElementById('statLowStock').innerText = lowStock.toLocaleString('th-TH');
         }
 
+        // ฟังก์ชันตรวจสอบว่าข้อความขึ้นต้นด้วยพยัญชนะที่ค้นหาหรือไม่ (รองรับสระหน้า เ, แ, โ, ใ, ไ)
+        function startsWithConsonant(text, char) {
+            if (!text || !char) return false;
+            const t = String(text).trim().toLowerCase();
+            const c = String(char).trim().toLowerCase();
+            if (t.startsWith(c)) return true;
+            const leadingVowels = ['เ', 'แ', 'โ', 'ใ', 'ไ'];
+            if (leadingVowels.includes(t[0]) && t.length > 1 && t[1] === c) return true;
+            return false;
+        }
+
         // 8. แสดงผลตารางสินค้า
         function onSearchInput() {
             clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = setTimeout(renderTable, 80);
+            searchDebounceTimer = setTimeout(renderTable, 40);
         }
 
         function renderTable() {
@@ -823,10 +834,30 @@
             const cat = document.getElementById('categoryFilter').value;
             const stockFilter = document.getElementById('stockFilter').value;
 
+            // หากพิมพ์พยัญชนะ 1 ตัว (เช่น "น") จะค้นหาเฉพาะสินค้าที่ขึ้นต้นด้วยพยัญชนะนั้นทันที ไม่ต้องพิมพ์หลายตัว
+            let isSingleCharStartMode = false;
+            if (search.length === 1) {
+                const hasStartMatch = products.some(p => {
+                    return startsWithConsonant(p.name, search) || startsWithConsonant(p.size || p.sku, search);
+                });
+                if (hasStartMatch) {
+                    isSingleCharStartMode = true;
+                }
+            }
+
             const filtered = products.filter(p => {
                 const name = (p.name || '').toLowerCase();
                 const size = (p.size || p.sku || '').toLowerCase();
-                const matchSearch = name.includes(search) || size.includes(search);
+                
+                let matchSearch = true;
+                if (search) {
+                    if (isSingleCharStartMode) {
+                        matchSearch = startsWithConsonant(name, search) || startsWithConsonant(size, search);
+                    } else {
+                        matchSearch = name.includes(search) || size.includes(search);
+                    }
+                }
+
                 const matchCat = !cat || p.category === cat;
                 
                 const qty = Number(p.quantity) || 0;
